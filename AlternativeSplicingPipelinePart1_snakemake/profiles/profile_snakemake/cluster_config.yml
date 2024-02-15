@@ -1,0 +1,29 @@
+__default__:
+    partition: pe2
+    mem: 20G
+    cpus-per-task: 5
+    job-name: "{rule}"
+    output: "logs/{rule}/{rule}.{wildcards}.out"
+    error: "logs/{rule}/{rule}.{wildcards}.err"
+
+parse_illumina:
+    mem: 150G
+
+find_polyA: 
+    mem: 20G
+
+assign_bc_umi:
+    mem: 400G
+    cpus-per-task: 5
+
+minimap:
+    mem: 50G
+
+consensus:
+    mem: 350G
+
+map_consensus:
+    mem: 50G
+
+save_reads:
+    mem: 20G

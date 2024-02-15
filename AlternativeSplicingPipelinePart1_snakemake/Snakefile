@@ -1,0 +1,544 @@
+import yaml
+from pathlib import Path
+import glob
+
+
+BASEDIR = Path(workflow.basedir)
+configfile: BASEDIR / 'config.yml'
+SAMPLES = str(os.environ.get("SAMPLES"))
+config['sample'] = SAMPLES
+print(config['sample'])
+
+list_consensus = ['consensus', 'consensus.final_output']
+
+rule all:
+    input:
+        tagged_consensus = expand(config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/{consensus_name}.sorted.tags.GE.bam', consensus_name=list_consensus),
+        isoform_mat = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/isoform_outputs/' + config['prefix'] + '_isomatrix.txt',
+        saved_merged = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.saved.bam',
+        all_merged = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.all.bam',
+        merged_saved_umifound = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.final_output.bam',
+        cons = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/consensus.fastq',
+        consf = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/consensus.final_output.fastq',
+        sorted_bam = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/consensus.sorted.bam',
+        sorted_bamf = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/consensus.final_output.sorted.bam',
+
+rule parse_illumina:
+    input: 
+        bam = config['sample_path'] + config['path_shortread'] + "/" + config['sample'] + '_' + config['name_shortread'],
+        barcodes = config['sample_path'] + config['path_shortread'] + "/" + config['sample'] + '_barcodes.tsv',
+    params:
+        illumina_parser = config['sicelore_path'] + '/IlluminaParser-1.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_illumina'])[:-3]+'g',
+    output:
+        parsed = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/parsed_for_Nanopore.obj',
+    resources:
+        mem = config['mem_illumina']
+    shell:
+        """
+        java -jar {params.mem_eff} {params.illumina_parser} \
+            --inFileIllumina {input.bam} \
+            --tsv {input.barcodes} \
+            --outFile {output.parsed} \
+            --cellBCflag CB \
+            --umiFlag UB \
+            --geneFlag GN
+        """
+
+def transform_int(i):
+    return(str(0)*(3 - len(str(i))) + str(i))
+
+list_num = [transform_int(i) for i in range(1,config['num_split'] + 1)]
+
+rule split_fastq:
+    input:
+        fastq = config['sample_path'] + config['path_ont'] + "/" + config['sample'] + '.fastq'
+    output:
+        split_files = expand(config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files_preliminary/{id}.sub.fastq', id=list_num)
+    params:
+        outdir = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files_preliminary/sub.fastq',
+        num_split = config['num_split'],
+        fastp = config['fastp']
+    resources:
+        mem = config['mem_default']
+    threads:
+        config['nthreads_split_fastq'] 
+    shell:
+        """
+        {params.fastp} \
+            -i {input.fastq} \
+            -Q \
+            -A \
+            --thread {threads} \
+            --split_prefix_digits=3 \
+            --out1={params.outdir} \
+            --split={params.num_split}
+        """
+
+
+checkpoint move_good_files:
+    input:
+        expand(str(config['outputs']) + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files_preliminary/{id}.sub.fastq', id=list_num)
+    params:
+        outdir_prelim = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files_preliminary/',
+        outdir_good_files = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_'  + config['sample'] + '/split_files/',
+        move_good_files = BASEDIR / 'scripts/move_good_files.py'
+    output:
+        split_files = directory(config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/')
+    shell:
+        """
+        mkdir -p {params.outdir_good_files};
+        python3 {params.move_good_files} -i {params.outdir_prelim} -o {params.outdir_good_files};
+        """
+
+
+rule find_polyA:
+    input:
+        fastq = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.fastq'
+    params:
+        outdir = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'],
+        polya_scan = config['sicelore_path'] + '/NanoporeReadScanner-0.5.jar',
+        mem_eff = '-Xmx'+str(config['mem_polya'])[:-3]+'g'
+    output:
+        create_fastq = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/passed/{num}.subFWD.fastq'
+    resources:
+        mem = config['mem_polya']
+    shell:
+        """
+        java -jar {params.mem_eff} {params.polya_scan} \
+            -i {input.fastq} \
+            -o {params.outdir}
+        """
+
+rule minimap:
+    input:
+        config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/passed/{num}.subFWD.fastq'
+    output:
+        view_sam = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.sam',
+        unsorted_bam = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.unsorted.bam',
+        sorted_bam = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.bam'
+    params:
+        junction_file = config['junction_file'],
+        ref_mmi = config['ref_mmi'],
+        path_spoa = config['spoa'],
+        path_minimap = config['minimap']
+    threads:
+        config['nthreads_minimap']
+    resources:
+        mem = config['mem_minimap']
+    shell:
+        """
+        PATH=$PATH:{params.path_spoa};
+        PATH=$PATH:{params.path_minimap};
+        {params.path_minimap} \
+            -ax splice \
+            -uf --MD --secondary=no --sam-hit-only -t {threads} \
+            --junc-bed {params.junction_file} {params.ref_mmi} {input} > {output.view_sam};
+        samtools view -Sb {output.view_sam} -o {output.unsorted_bam};
+        samtools sort {output.unsorted_bam} -o {output.sorted_bam};
+        samtools index {output.sorted_bam}
+        """
+
+rule gene_tag:
+    input:
+        sorted_bam = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.bam'
+    output:
+        tag_gene = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.GE.bam'
+    params:
+        refflat = config['refFlat'],
+        sicelore_pipeline = config['sicelore_path'] + '/Sicelore-1.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_default'])[:-3]+'g'
+    resources:
+        mem = config['mem_default']
+    shell:
+        """
+        java -jar {params.mem_eff} {params.sicelore_pipeline} \
+            AddGeneNameTag I={input.sorted_bam} O={output.tag_gene} \
+            REFFLAT={params.refflat} \
+            GENETAG=GE \
+            ALLOW_MULTI_GENE_READS=true \
+            USE_STRAND_INFO=true \
+            VALIDATION_STRINGENCY=SILENT;
+        samtools index {output.tag_gene}
+        """
+
+rule add_sequence_tag:
+    input:
+        tag_gene = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.GE.bam',
+        fastq = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/passed/{num}.subFWD.fastq'
+    params:
+        sicelore_pipeline = config['sicelore_path'] + '/Sicelore-1.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_default'])[:-3]+'g'
+    resources:
+        mem = config['mem_default']
+    output:
+        tag_seq = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.GEUS.bam'
+    shell:
+        """
+        java -jar {params.mem_eff} {params.sicelore_pipeline} \
+            AddBamReadSequenceTag I={input.tag_gene} O={output.tag_seq} FASTQ={input.fastq};
+        samtools index {output.tag_seq}
+        """
+
+
+rule assign_umi_bc:
+    input:
+        tag_seq = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.GEUS.bam',
+        parse_obj = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/parsed_for_Nanopore.obj'
+    output:
+        obj1 = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.GEUS10xAttributes.bam',
+        obj2 = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.GEUS10xAttributes_umifound_.bam',
+    params:
+        threads_eff = config['nthreads_assign_umi'],
+        umi_percent = config['umi_percent'],
+        bc_percent = config['bc_percent'],
+        polya_length = config['polya_length'],
+        cb_umi_finder = config['sicelore_path'] + '/NanoporeBC_UMI_finder-1.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_assign_umi'])[:-3]+'g',
+        path_spoa = config['spoa']
+    threads:
+        config['nthreads_assign_umi']
+    resources:
+        mem = config['mem_assign_umi'],
+    shell:
+        """
+        PATH=$PATH:{params.path_spoa};
+        java -jar {params.mem_eff} {params.cb_umi_finder} \
+            -i {input.tag_seq} \
+            -o {output.obj1} \
+            -k {input.parse_obj} \
+            -t {params.threads_eff} \
+            --maxUMIfalseMatchPercent {params.umi_percent} \
+            --maxBCfalseMatchPercent {params.bc_percent} \
+            --polyAlength {params.polya_length}
+        """
+
+def aggregate_input(wildcards):
+    checkpoint_output = checkpoints.move_good_files.get(**wildcards).output[0]
+    return(expand(str(config['outputs']) + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{id}.sub.GEUS10xAttributes_umifound_.bam', id=glob_wildcards(os.path.join(checkpoint_output, '{id}.sub.fastq')).id))
+
+rule merge:
+    input:
+        list_subfiles = aggregate_input
+    params:
+        input_list = lambda wildcards, input : ['I=' + file for file in input.list_subfiles],
+        mem_eff = '-Xmx'+str(config['mem_default'])[:-3]+'g',
+        path_picard = config['picard'],
+    resources:
+        mem = config['mem_default']
+    output:
+        merged = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.umifound.bam'
+    shell:
+        """
+        java -jar {params.mem_eff} {params.path_picard} MergeSamFiles {params.input_list} \
+            ASSUME_SORTED=TRUE \
+            TMP_DIR=/scratch/tmp/ \
+            MAX_RECORDS_IN_RAM=100000000 \
+            OUTPUT={output.merged} \
+            VALIDATION_STRINGENCY=SILENT;
+        samtools index {output.merged}
+        """
+def aggregate_input_all(wildcards):
+    checkpoint_output = checkpoints.move_good_files.get(**wildcards).output[0]
+    return(expand(str(config['outputs']) + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{id}.sub.GEUS10xAttributes.bam', id=glob_wildcards(os.path.join(checkpoint_output, '{id}.sub.fastq')).id))
+
+rule merge_all:
+    input:
+        list_subfiles = aggregate_input_all
+    params:
+        input_list = lambda wildcards, input : ['I=' + file for file in input.list_subfiles],
+        mem_eff = '-Xmx'+str(config['mem_default'])[:-3]+'g',
+        path_picard = config['picard'],
+    resources:
+        mem = config['mem_default']
+    output:
+        merged = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.all.bam'
+    shell:
+        """
+        java -jar {params.mem_eff} {params.path_picard} MergeSamFiles {params.input_list} \
+            ASSUME_SORTED=TRUE \
+            TMP_DIR=/scratch/tmp/ \
+            MAX_RECORDS_IN_RAM=100000000 \
+            OUTPUT={output.merged} \
+            VALIDATION_STRINGENCY=SILENT;
+        samtools index {output.merged}
+        """
+
+rule consensus:
+    input:
+        merged = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.umifound.bam'
+    output:
+        cons = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/consensus.fastq'
+    params:
+        temp_dir = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/temp/',
+        sicelore_pipeline = config['sicelore_path'] + '/Sicelore-2.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_consensus'])[:-3]+'g',
+        path_spoa = config['spoa'],
+    resources:
+        mem = config['mem_consensus'],
+    threads:
+        config['nthreads_consensus'],
+    shell:
+    	"""
+        mkdir -p {params.temp_dir};
+        PATH=$PATH:{params.path_spoa};
+    	java -jar {params.mem_eff} {params.sicelore_pipeline} \
+            ComputeConsensus I={input.merged} \
+            O={output.cons} \
+            T={threads} \
+            TMPDIR={params.temp_dir} \
+            MAXREADS=1000
+    	"""
+
+rule consensus_final:
+    input:
+        merged = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.final_output.bam'
+    output:
+        cons = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/consensus.final_output.fastq'
+    params:
+        temp_dir = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/temp_final/',
+        sicelore_pipeline = config['sicelore_path'] + '/Sicelore-2.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_consensus'])[:-3]+'g',
+        path_spoa = config['spoa']
+    resources:
+        mem = config['mem_consensus']
+    threads:
+        config['nthreads_consensus']
+    shell:
+        """
+        mkdir -p {params.temp_dir};
+        PATH=$PATH:{params.path_spoa};
+        java -jar {params.mem_eff} {params.sicelore_pipeline} \
+            ComputeConsensus I={input.merged} \
+            O={output.cons} \
+            T={threads} \
+            TMPDIR={params.temp_dir} \
+            MAXREADS=1000
+        """
+
+
+rule map_consensus:
+    input:
+        cons = "{outputs}/{sample}/sicelore_outputs_{sample}/consensus_outputs/{consensus_name}.fastq"
+    output:
+        view_sam = "{outputs}/{sample}/sicelore_outputs_{sample}/consensus_outputs/{consensus_name}.sam",
+        unsorted_bam = "{outputs}/{sample}/sicelore_outputs_{sample}/consensus_outputs/{consensus_name}.unsorted.bam",
+        sorted_bam = "{outputs}/{sample}/sicelore_outputs_{sample}/consensus_outputs/{consensus_name}.sorted.bam",
+    params:
+        junction_file_consensus = config['junction_file_consensus'],
+        ref_mmi = config['ref_mmi'],
+        path_spoa = config['spoa'],
+        path_minimap = config['minimap']
+    threads:
+        config['nthreads_minimap']
+    resources:
+        mem = config['mem_minimap']
+    shell:
+        """
+        PATH=$PATH:{params.path_spoa};
+        PATH=$PATH:{params.path_minimap};
+        {params.path_minimap} \
+            -ax splice -uf --MD \
+            --secondary=no \
+            --sam-hit-only \
+            -t {threads} --junc-bed {params.junction_file_consensus} \
+            {params.ref_mmi} {input.cons} > {output.view_sam};
+        samtools view -Sb {output.view_sam} -o {output.unsorted_bam};
+        samtools sort {output.unsorted_bam} -o {output.sorted_bam};
+        samtools index {output.sorted_bam}
+        """
+
+rule add_umi_barcode_tag_consensus:
+    input:
+        sorted_bam = "{outputs}/{sample}/sicelore_outputs_{sample}/consensus_outputs/{consensus_name}.sorted.bam",
+    output:
+        tagged_bam = "{outputs}/{sample}/sicelore_outputs_{sample}/consensus_outputs/{consensus_name}.sorted.tags.bam",
+    params:
+        sicelore_pipeline = config['sicelore_path'] + '/Sicelore-1.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_default'])[:-3]+'g'
+    resources:
+        mem = config['mem_default']
+    shell:
+        """
+        java -jar {params.mem_eff} {params.sicelore_pipeline} \
+            AddBamMoleculeTags I={input.sorted_bam} O={output.tagged_bam};
+        samtools index {output.tagged_bam};
+        """
+
+rule add gene_tag_consensus:
+    input:
+        tagged_bam = "{outputs}/{sample}/sicelore_outputs_{sample}/consensus_outputs/{consensus_name}.sorted.tags.bam",
+    output:
+        tagged_gene_bam = "{outputs}/{sample}/sicelore_outputs_{sample}/consensus_outputs/{consensus_name}.sorted.tags.GE.bam",
+    params:
+        refflat = config['refFlat'],
+        sicelore_pipeline = config['sicelore_path'] + '/Sicelore-1.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_default'])[:-3]+'g'
+    resources:
+        mem = config['mem_default']
+    shell:
+        """
+        java -jar {params.mem_eff} {params.sicelore_pipeline} \
+            AddGeneNameTag I={input.tagged_bam} O={output.tagged_gene_bam} \
+            REFFLAT={params.refflat} \
+            GENETAG=GE \
+            ALLOW_MULTI_GENE_READS=true \
+            USE_STRAND_INFO=true \
+            VALIDATION_STRINGENCY=SILENT;
+        samtools index {output.tagged_gene_bam}
+        """
+
+rule detect_existing_isoforms:
+    input:
+        tagged_consensus = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/consensus.sorted.tags.GE.bam',
+        barcodes = config['sample_path'] + config['path_shortread'] + "/" + config['sample'] + '_barcodes.tsv',
+        refflat = config['refFlat'],
+    params:
+        outdir = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/isoform_outputs/',
+        prefix = config['prefix'],
+        delta = config['delta'],
+        method = config['method'],
+        sicelore_pipeline = config['sicelore_path'] + '/Sicelore-1.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_consensus'])[:-3]+'g'
+    resources:
+        mem = config['mem_consensus']
+    output:
+        isomatrix = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/isoform_outputs/' + config['prefix'] + '_isomatrix.txt',
+    shell:
+        """
+        java -jar {params.mem_eff} {params.sicelore_pipeline} \
+            IsoformMatrix I={input.tagged_consensus} GENETAG=GE UMITAG=U8 \
+            CELLTAG=BC REFFLAT={input.refflat} CSV={input.barcodes} ISOBAM=true \
+            DELTA={params.delta} MAXCLIP=150 METHOD={params.method} AMBIGUOUS_ASSIGN=false \
+            OUTDIR={params.outdir} PREFIX={params.prefix}
+        """
+
+rule detect_novel_isoforms:
+    input:
+        isobam = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/isoform_outputs/sicelore_isobam.bam',
+        barcodes = config['sample_path'] + config['path_shortread'] + "/" + config['sample'] + '_barcodes.tsv',
+        refflat = config['refFlat'],
+        short = config['sample_path'] + "/" + config['sample'] + config['path_shortread'] + "/" +  config['sample'] + "_" + config['name_shortread'], 
+    params:
+        delta = config['delta'],
+        prefix = config['prefix_novel'],
+        outdir = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/isoform_outputs/',
+        min_evidence = config['min_evidence'],
+        rnmin = config['rnmin'],
+        cage_peaks = config['cage_peaks'],
+        polya = config['polya'],
+        sicelore_pipeline = config['sicelore_path'] + 'Sicelore-1.0.jar',
+        mem_eff = '-Xmx'+str(config['mem_consensus'])[:-3]+'g',
+        path_spoa = config['spoa']
+    resources:
+        mem = config['mem_consensus']
+    output:
+        config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/isoform_outputs/' + str(config['prefix']) + '.d' + str(config['delta']) + '.rn' + str(config['rnmin']) + '.e' + str(config['min_evidence']) + '.txt'
+    shell:
+        """
+        PATH=$PATH:{params.path_spoa};
+        samtools index {input.short};
+        samtools index {input.isobam};
+        java -jar {params.mem_eff} {params.sicelore_pipeline} \
+            CollapseModel I={input.isobam} CSV={input.barcodes} REFFLAT={input.refflat} \
+            PREFIX={params.prefix} OUTDIR={params.outdir} MINEVIDENCE={params.min_evidence} \
+            DELTA={params.delta} RNMIN={params.rnmin} SHORT={input.short} CAGE={params.cage_peaks} \
+            POLYA={params.cage_peaks}
+        """
+
+rule fastqc:
+    input:
+        raw_fastq = config['sample_path'] + config['path_ont'] + "/" + config['sample'] + '.fastq',
+        umi_bc_fastq = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.umifound.bam',
+        raw_consensus = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/consensus.fastq',
+        tagged_consensus = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/consensus_outputs/consensus.sorted.tags.GE.bam'
+    params:
+        res_outdir = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/obs_fastqc/'
+    output:
+        config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/obs_fastqc/consensus.sorted.tags.GE_fastqc.html'
+    shell:
+        """
+        module load fastqc;
+        cd {params.res_outdir};
+        fastqc {input.raw_fastq} -o ./ ;
+        fastqc {input.umi_bc_fastq} -o ./ ;
+        fastqc {input.raw_consensus} -o ./ ;
+        fastqc {input.tagged_consensus} -o ./
+        """
+
+rule save_reads:
+    input:
+        before_assign = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/split_files/{num}.sub.GEUS10xAttributes.bam',
+        raw_counts = config['sample_path'] + config['path_counts'] + "/" + config['sample'] + '_raw_counts.csv', 
+    output:
+        header = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/save_reads/headers/{num}.sub.GEUS10xAttributes.header.sam',
+        no_umi = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/save_reads/temp/{num}.sub.GEUS10xAttributes.no_umi.bam',
+        no_umi_good_bc = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/save_reads/temp/{num}.sub.GEUS10xAttributes.no_umi_good_bc.bam',
+        saved = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/save_reads/{num}.sub.GEUS10xAttributes.saved.bam',
+        metrics = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/save_reads/{num}.sub.GEUS10xAttributes.saved.stats.csv'
+    params:
+        thresh = config['thresh_bc'],
+        thresh_cov = config['thresh_coverage'],
+        thresh_quality = config['thresh_quality'],
+        filter_barcodes = BASEDIR / 'scripts/filter_barcodes.py',
+        keep_good_reads_cellranger = BASEDIR / 'scripts/keep_good_reads_cellranger.py',
+        metrics_outputs = BASEDIR / 'scripts/metrics_outputs.py',
+    shell:
+        """
+        samtools view -H {input.before_assign} > {output.header};
+        samtools view {input.before_assign} | grep BC:Z: | grep -v U8:Z: | grep -v B9:Z: | cat {output.header} - | samtools view -Sb - > {output.no_umi};
+        samtools index {output.no_umi};
+        python {params.filter_barcodes} -i {output.no_umi} -o {output.no_umi_good_bc} -th {params.thresh};
+        samtools index {output.no_umi_good_bc};
+        python {params.keep_good_reads_cellranger} -i {output.no_umi_good_bc} -o {output.saved} -c {input.raw_counts} -th {params.thresh_cov} -thi {params.thresh_quality};
+        samtools index {output.saved};
+        python {params.metrics_outputs} -i {output.saved} -o {output.metrics}
+        """
+
+def aggregate_input_save_reads(wildcards):
+    checkpoint_output = checkpoints.move_good_files.get(**wildcards).output[0]
+    return(expand(str(config['outputs']) + "/" + config['sample'] + '/sicelore_outputs_' + str(config['sample']) + '/save_reads/{id}.sub.GEUS10xAttributes.saved.bam', id=glob_wildcards(os.path.join(checkpoint_output, '{id}.sub.fastq')).id))
+
+rule merge_saved_reads:
+    input:
+        list_subfiles = aggregate_input_save_reads
+    params:
+        input_list = lambda wildcards, input : ['I=' + file for file in input.list_subfiles],
+        mem_eff = '-Xmx'+str(config['mem_default'])[:-3]+'g',
+        path_picard = config['picard']
+    resources:
+        mem = config['mem_default']
+    output:
+        merged = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.saved.bam'
+    shell: 
+        """
+        java -jar {params.mem_eff} {params.path_picard} MergeSamFiles {params.input_list} \
+            ASSUME_SORTED=TRUE \
+            TMP_DIR=/scratch/tmp/ \
+            MAX_RECORDS_IN_RAM=100000000 \
+            OUTPUT={output.merged} \
+            VALIDATION_STRINGENCY=SILENT;
+        samtools index {output.merged}
+        """
+
+rule merge_saved_umifound_reads:
+    input:
+        merged_saved = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.saved.bam',
+        merged_umifound = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.umifound.bam'
+    output:
+        merged_saved_umifound = config['outputs'] + "/" + config['sample'] + '/sicelore_outputs_' + config['sample'] + '/GEUS10xAttributes.final_output.bam',
+    params:
+        mem_eff = '-Xmx'+str(config['mem_default'])[:-3]+'g',
+        path_picard = config['picard']
+    resources:
+        mem = config['mem_default']
+    shell:
+        """
+        java -jar {params.mem_eff} {params.path_picard} MergeSamFiles I={input.merged_saved} I={input.merged_umifound} \
+            ASSUME_SORTED=TRUE \
+            TMP_DIR=/scratch/tmp/ \
+            MAX_RECORDS_IN_RAM=100000000 \
+            OUTPUT={output.merged_saved_umifound} \
+            VALIDATION_STRINGENCY=SILENT;
+        samtools index {output.merged_saved_umifound}
+        """

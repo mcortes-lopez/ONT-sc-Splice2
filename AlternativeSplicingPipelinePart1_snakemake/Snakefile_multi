@@ -1,0 +1,62 @@
+shell.executable("/bin/bash")
+from pathlib import Path
+""" Snakemake pipeline for 10X Genomics 3' single-cell RNA-seq and ONT long read joint isoform analysis, Part 1 """
+BASEDIR = Path(workflow.basedir)
+configfile: "config.yml"
+SAMPLES = config["SAMPLES"]
+
+rule all:
+  input:
+    expand(config['outputs'] + '/{samples}/sicelore_outputs_{samples}/consensus_outputs/consensus.sorted.tags.GE.bam', samples = SAMPLES),
+    expand(config['sample_path'] + config['path_counts'] + '/{samples}_raw_counts.csv', samples = SAMPLES), 
+
+rule get_counts:
+  input:
+    config['sample_path'] + config['path_counts'] + "/CellRangerOutput/{samples}/filtered_feature_bc_matrix"
+  output:
+    config['sample_path'] + config['path_counts'] + '/{samples}_raw_counts.csv'
+  log:
+    config['outputs'] +"/logs/{samples}_get_counts.txt"
+  threads:
+    5
+  shell:
+    """
+    module load R/3.6.0
+    Rscript ./utils/get_raw_counts.R {input} {output}
+    """
+
+rule run_sicelore:
+  input:
+    config['sample_path'] + config['path_counts'] + '/{samples}_raw_counts.csv'
+  output:
+    config['outputs'] + '/{samples}/sicelore_outputs_{samples}/consensus_outputs/consensus.sorted.tags.GE.bam'
+  params:
+    samples = "{samples}",
+    basedir = BASEDIR,
+    path = config['outputs'] + '/{samples}/sicelore_outputs_{samples}'
+  log:
+    config['outputs'] +"/logs/{samples}_sicelore.txt"
+  threads:
+    10
+  shell:
+    """
+    #module unload snakemake
+    #module load anaconda3/10.19
+    module load java/1.9
+    module load samtools
+    module load bedtools
+    module load racon
+    set +eu
+    source activate use_mamba
+    source activate sicelore2.0
+    set -eu
+    
+    echo {params.samples}
+    mkdir -p {params.path}
+    cp config.yml {params.path}/
+    cd {params.path}
+    
+    snakemake -v
+    SAMPLES="{params.samples}" snakemake --unlock -s {params.basedir}/Snakefile
+    SAMPLES="{params.samples}" snakemake -s {params.basedir}/Snakefile --profile {params.basedir}/profiles/profile_snakemake --stats sicelore_runtime.txt
+    """

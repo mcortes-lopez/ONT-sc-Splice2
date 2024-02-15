@@ -1,0 +1,6 @@
+{
+    "SBATCH_DEFAULTS": "partition=bigmem",
+    "CLUSTER_NAME": "",
+    "CLUSTER_CONFIG": "",
+    "ADVANCED_ARGUMENT_CONVERSION": "no"
+}

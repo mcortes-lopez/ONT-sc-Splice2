@@ -1,0 +1,32 @@
+WORKDIR:
+  "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/minimal_example"
+  #"/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/062723/from_top"
+RUN_FILES:
+  "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/pipeline/AlternativeSplicingPipelinePart3_snakemake/MultiSample.MultiGroupComp.AdjVars.Scripts"
+RUN_FILESIR:
+  "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/pipeline/AlternativeSplicingPipelinePart3_snakemake/MultiSample.MultiGroupComp.AdjVars.Scripts.IR"
+SAMPLES:
+  - "MDS02A-chr21"
+  #- "CF-1620_262447"
+    #- "CF-1620_364042"
+    #- "CF-1620_466631"
+NPERM:
+  100000
+JOB_NAME:
+  "snakemake_part3"
+COMP_GROUPS_COLUMN:
+  "Genotype_1UMI"
+COMP1:
+  "WT"
+COMP2:
+  "MUT"
+CELL_GROUPS_COLUMN:
+  "ALL"
+GROUPLIST:
+  "ALL"
+OUTPUTDIR:
+  "output_dir"
+JUNC_COV_THRESH:
+  5
+N_CHUNK:
+  5

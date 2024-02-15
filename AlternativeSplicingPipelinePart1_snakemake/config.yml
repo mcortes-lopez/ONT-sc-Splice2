@@ -1,0 +1,83 @@
+#### -------------- Don't forget to check the config.xml file in sicelore path to set the window size for ONT/Illumina matching ----------------- ####
+### List samples
+SAMPLES:
+  # - "SMMG00_1A_1B_6A"
+    #- "SMMG00_5A_5B_6B"
+    #- "TKU3851"  
+  #- "TKU4010"
+  - "TKU3874"
+    #- "TKU4354"
+
+### Paths to softwares
+picard: '/nfs/home/rfu/packages/picard.jar'
+fastp: '/nfs/sw/fastp/fastp-0.20.0/fastp'
+sicelore_path : '/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/LandauONT/tools/Sicelore_2.0/sicelore/Jar'
+spoa : '/nfs/home/rfu/packages/spoa/build/bin/'
+minimap : '/nfs/home/rfu/packages/minimap2/minimap2'
+
+### Loading data from 10x and ONT
+#sample : 'TKU4354_subsample_5b'
+sample_path : "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/062723/vlu_runs"
+path_shortread : '/input_files/2.short_read_files'
+name_shortread : 'possorted_genome_bam.bam'
+path_ont : '/input_files/1.ONT_fastq'
+path_counts : '/input_files/3.raw_counts'
+
+### Output directory
+outputs : "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/062723/vlu_runs/output_files"
+
+### Number of subfiles to speed up the pipeline
+num_split : 50
+
+### Ref files
+ref_mmi : '/gpfs/commons/groups/nygcfaculty/LandauONT/GRCh38.p12.mmi'
+junction_file : '/gpfs/commons/home/vlu/ONT/MGH105_ACAligned.sortedByCoord.out.ss025.bed12.bed'
+junction_file_consensus : '/gpfs/commons/home/vlu/ONT/MGH105_ACAligned.sortedByCoord.out.ss025.bed12.bed'
+refFlat : '/gpfs/commons/groups/nygcfaculty/LandauONT/gencode.v31.refFlat'
+cage_peaks : '/gpfs/commons/home/vlu/ONT/hg38_fair+new_CAGE_peaks_phase1and2.bed'
+polya : '/gpfs/commons/home/vlu/ONT/gencode.v41.polyAs.gtf'
+
+### Resources for parallelization
+# Threads
+nthreads_split_fastq : 1
+nthreads_minimap : 10
+nthreads_assign_umi : 5
+nthreads_consensus : 10
+
+# Memory allocation
+mem_default : 50000
+mem_illumina : 100000
+mem_assign_umi : 300000
+mem_minimap : 50000
+mem_polya : 50000
+mem_consensus : 350000
+
+### Percentage of false alignment for BC and UMI
+umi_percent : 2
+bc_percent : 5
+
+### Min length of polyA tail
+polya_length : 10
+
+### ---------------------------------------------- Saving reads ----------------------------------------- ###
+#raw_counts : '_raw_counts.csv'
+
+# Max barcode missmatched
+thresh_bc : 4
+
+# Min number of UMIs on the genes
+thresh_coverage : 5
+
+# Min mapping quality
+thresh_quality : 60
+
+### --------------------------------------------- Isoform calling  ------------------------------------------- ###
+# Annotated isoforms
+prefix : 'sicelore'
+delta : 2
+
+# Novel isoforms
+method : 'STRICT'
+prefix_novel : 'collapse'
+min_evidence : 5 
+rnmin : 1
