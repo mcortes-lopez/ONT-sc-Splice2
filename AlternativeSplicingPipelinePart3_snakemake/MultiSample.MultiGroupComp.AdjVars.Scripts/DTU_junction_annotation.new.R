@@ -74,11 +74,11 @@ three.data$dPSI_threshold_5 = NA
 five.data$dPSI_threshold_5 = NA
 three.data$pvalue_threshold = NA
 five.data$pvalue_threshold = NA
-three.data = three.data %>% mutate(dPSI_threshold_0 = ifelse(dPSI > 0, "yes", "no"),
-                            dPSI_threshold_5 = ifelse(dPSI >= 5, "yes", "no"),
+three.data = three.data %>% mutate(dPSI_threshold_0 = ifelse(abs(dPSI) > 0, "yes", "no"),
+                            dPSI_threshold_5 = ifelse(abs(dPSI) >= 5, "yes", "no"),
                             pvalue_threshold = ifelse(pvalue < 0.05, "yes", "no"))
-five.data = five.data %>% mutate(dPSI_threshold_0 = ifelse(dPSI > 0, "yes", "no"),
-                                   dPSI_threshold_5 = ifelse(dPSI >= 5, "yes", "no"),
+five.data = five.data %>% mutate(dPSI_threshold_0 = ifelse(abs(dPSI) > 0, "yes", "no"),
+                                   dPSI_threshold_5 = ifelse(abs(dPSI) >= 5, "yes", "no"),
                                  pvalue_threshold = ifelse(pvalue < 0.05, "yes", "no"))
 
 
@@ -87,10 +87,10 @@ three.data$dPSI_0_pvalue_threshold = "no"
 five.data$dPSI_0_pvalue_threshold = "no"
 three.data$dPSI_5_pvalue_threshold = "no"
 five.data$dPSI_5_pvalue_threshold = "no"
-three.data[which(three.data$pvalue < 0.05 & three.data$dPSI > 0),]$dPSI_0_pvalue_threshold = "yes"
-three.data[which(three.data$pvalue < 0.05 & three.data$dPSI >= 5),]$dPSI_5_pvalue_threshold = "yes"
-five.data[which(five.data$pvalue < 0.05 & five.data$dPSI > 0),]$dPSI_0_pvalue_threshold = "yes"
-five.data[which(five.data$pvalue < 0.05 & five.data$dPSI >= 5),]$dPSI_5_pvalue_threshold = "yes"
+three.data[which(three.data$pvalue < 0.05 & abs(three.data$dPSI) > 0),]$dPSI_0_pvalue_threshold = "yes"
+three.data[which(three.data$pvalue < 0.05 & abs(three.data$dPSI) >= 5),]$dPSI_5_pvalue_threshold = "yes"
+five.data[which(five.data$pvalue < 0.05 & abs(five.data$dPSI) > 0),]$dPSI_0_pvalue_threshold = "yes"
+five.data[which(five.data$pvalue < 0.05 & abs(five.data$dPSI) >= 5),]$dPSI_5_pvalue_threshold = "yes"
 
 ## filter for only cryptic sites 
 three.data.cryptic = three.data %>% filter(Final_Verdict == "Cryptic_threeprime")
@@ -125,6 +125,7 @@ five.df = bind_rows(five.df.list, .id = "Category")
 
 ## save plots and files 
 library(forcats)
+library(RColorBrewer)
 setwd(output)
 
 write.table(three.data, "logOR_within_cell_type_ALT_3P_Junctions_with_threshold_info.txt")
@@ -132,15 +133,22 @@ write.table(five.data, "logOR_within_cell_type_ALT_5P_Junctions_with_threshold_i
 write.table(three.data.cryptic, "logOR_within_cell_type_ONLY_CRYPTIC_3P_Junctions_with_threshold_info.txt")
 write.table(five.data.cryptic, "logOR_within_cell_type_ONLY_CRYPTIC_5P_Junctions_with_threshold_info.txt")
 
-three.df %>% mutate(Var1 = fct_reorder(Var1, Category)) %>% 
-  ggplot(aes(x = Category, y = Freq, fill = Var1)) + geom_bar(stat = "identity", position = "dodge") + theme_classic() +
-  ggtitle("MDS_P1 Threeprime Cryptic Junctions") + theme(plot.title = element_text(hjust = 0.5))
+threep_plot <- three.df %>% mutate(Var1 = fct_reorder(Var1, Category)) %>% 
+  ggplot(aes(x = Category, y = Freq, fill = Var1)) + 
+  geom_bar(stat = "identity", position = position_dodge2(width = 0.9, preserve = "single")) + 
+  theme_classic() + 
+  scale_fill_brewer(palette = "Set1")+
+  ggtitle("3' Cryptic Junctions") + theme(plot.title = element_text(hjust = 0.5))
 
-ggsave("Cryptic_threeprime_thresholds_distribution.pdf", width = 10, height = 10)
 
-five.df %>% mutate(Var1 = fct_reorder(Var1, Category)) %>% 
-  ggplot(aes(x = Category, y = Freq, fill = Var1)) + geom_bar(stat = "identity", position = "dodge") + theme_classic() +
-  ggtitle("MDS_P1 Fiveprime Cryptic Junctions") + theme(plot.title = element_text(hjust = 0.5))
+fivep_plot <- five.df %>% mutate(Var1 = fct_reorder(Var1, Category)) %>% 
+  ggplot(aes(x = Category, y = Freq, fill = Var1)) + 
+  geom_bar(stat = "identity", position = position_dodge2(width = 0.9, preserve = "single")) + 
+  theme_classic() + 
+  scale_fill_brewer(palette = "Set1")+
+  ggtitle("5' Cryptic Junctions") + theme(plot.title = element_text(hjust = 0.5))
 
-ggsave("Cryptic_fiveprime_thresholds_distribution.pdf", width = 10, height = 10)
-
+library(patchwork)
+pdf("splicing_threshold_distribution.pdf", height = 5, width=10)
+threep_plot + fivep_plot
+dev.off()

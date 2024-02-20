@@ -1,15 +1,12 @@
 WORKDIR:
-  "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/minimal_example"
-  #"/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/062723/from_top"
+  "path/to/snakemake_folder/minimal_example"
+  #"/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/minimal_example"
 RUN_FILES:
-  "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/pipeline/AlternativeSplicingPipelinePart3_snakemake/MultiSample.MultiGroupComp.AdjVars.Scripts"
+  "path/to/snakemake_folder/MultiSample.MultiGroupComp.AdjVars.Scripts"
 RUN_FILESIR:
-  "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/pipeline/AlternativeSplicingPipelinePart3_snakemake/MultiSample.MultiGroupComp.AdjVars.Scripts.IR"
+  "path/to/snakemake_folder/MultiSample.MultiGroupComp.AdjVars.Scripts.IR"
 SAMPLES:
   - "MDS02A-chr21"
-  #- "CF-1620_262447"
-    #- "CF-1620_364042"
-    #- "CF-1620_466631"
 NPERM:
   100000
 JOB_NAME:

@@ -1,9 +1,6 @@
 #!/bin/bash
-
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32g 
-
-module load R/3.6.0
 
 run_files=$1
 outputsdir=$2

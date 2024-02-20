@@ -17,6 +17,9 @@ sample.names = args[8]
 cov.thresh = as.integer(args[9]) ##set to 5 as default 
 group1_name = args[10]
 group2_name = args[11]
+nchunk = as.integer(args[12])
+
+print(args)
 #if(is.na(cov.thresh)){
 #  cov.thresh = 5
 #}
@@ -88,8 +91,7 @@ i = 1
 
 
 for (file in list.files(path.to.cell.meta)){
-  cell.meta = as.data.frame(read.table(file, stringsAsFactors = F))
-  #print(cell.meta[1:5,])
+  cell.meta = as.data.frame(read.table(file, stringsAsFactors = F, header = TRUE, fill = TRUE))
   
   cell.meta = cell.meta[,c(cell.groups.column, comp.groups.column)]
   print("Removing Pattern on cell barcode")
@@ -188,15 +190,17 @@ data.comb = inner_join(data.comb, comb.metadata)
 clusters = data.comb %>% group_by(five_prime_ID) %>% tally()
 filt.clusters = clusters %>% filter(n != 1)
 clust.three = filt.clusters$five_prime_ID
-alt.clust.three = data.comb[which(data.comb$endClass == "not_main_3_prime" | data.comb$startClass == "not_main_3_prime"), "five_prime_ID"]
-alt.clust.three = intersect(alt.clust.three, clust.three)
+#alt.clust.three = data.comb[which(data.comb$endClass == "not_main_3_prime" | data.comb$startClass == "not_main_3_prime"), "five_prime_ID"]
+#alt.clust.three = intersect(alt.clust.three, clust.three)
+alt.clust.three = clust.three
 length(alt.clust.three)
 
 clusters = data.comb %>% group_by(three_prime_ID) %>% tally()
 filt.clusters = clusters %>% filter(n != 1)
 clust.five = filt.clusters$three_prime_ID
-alt.clust.five = data.comb[which(data.comb$endClass == "not_main_5_prime" | data.comb$startClass == "not_main_5_prime"), "three_prime_ID"]
-alt.clust.five = intersect(alt.clust.five, clust.five)
+#alt.clust.five = data.comb[which(data.comb$endClass == "not_main_5_prime" | data.comb$startClass == "not_main_5_prime"), "three_prime_ID"]
+#alt.clust.five = intersect(alt.clust.five, clust.five)
+alt.clust.five = clust.five
 length(alt.clust.five)
 
 ## filter for three prime junctions
@@ -223,8 +227,8 @@ message("data filtered")
 
 
 setwd(output.dir)
-split_clusters_three = chunk(alt.clust.three, 100)
-split_clusters_five = chunk(alt.clust.five, 100)
+split_clusters_three = chunk(alt.clust.three, nchunk)
+split_clusters_five = chunk(alt.clust.five, nchunk)
 message("clusters split")
 
 

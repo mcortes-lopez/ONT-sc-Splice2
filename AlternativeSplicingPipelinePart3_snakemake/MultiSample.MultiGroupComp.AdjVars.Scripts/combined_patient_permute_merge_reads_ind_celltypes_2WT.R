@@ -9,6 +9,7 @@ library(tidyverse)
 library(matrixStats)
 
 args = commandArgs(TRUE)
+options(dplyr.summarise.inform = FALSE)
 path.to.split = args[1]
 path.to.cell.meta = args[2]
 comp.groups.column = args[3] #e.g. genotype labels
@@ -17,6 +18,8 @@ nperm = args[5]
 sample.names = args[6]
 output.dir = args[7]
 output.file = args[8]
+group1_name = args[9]
+group2_name = args[10]
 
 print(args)
 
@@ -48,7 +51,7 @@ for (sample in sample.names ){
 }
 
 files <- unlist(files)
-three.mtx.list = lapply(files, function(x) read.table(file=x, header = TRUE))
+three.mtx.list = lapply(files, function(x) read.table(file=x, header = TRUE, stringsAsFactors=F, fill = TRUE))
 print(files)
 print(sample.names)
 names(three.mtx.list) = sample.names
@@ -64,7 +67,7 @@ for (sample in sample.names ){
 }
 files <- unlist(files)
 print(files)
-five.mtx.list = lapply(files, function(x) read.table(file=x, header = TRUE))
+five.mtx.list = lapply(files, function(x) read.table(file=x, header = TRUE, stringsAsFactors=F, fill = TRUE))
 names(five.mtx.list) = sample.names
 print(names(five.mtx.list))
 
@@ -193,8 +196,8 @@ for(x in 0:nperm){
     shf.annotation = sample(cell.annotation_vec, size = length(cell.annotation_vec), replace = F)
     names(shf.annotation) = orig.names
 
-    group2 = names(shf.annotation)[shf.annotation == "group2"]
-    group1 = names(shf.annotation)[shf.annotation == "group1"]
+    group2 = names(shf.annotation)[shf.annotation == group2_name]
+    group1 = names(shf.annotation)[shf.annotation == group1_name]
 
     three.shf.data = three.shf.data.list[[sample]]
 
@@ -280,7 +283,6 @@ for(x in 0:nperm){
   temp.five = temp.five + five.shf.diff
 
   #progress(value = x, max.value = nperm, progress.bar = T)
-  Sys.sleep(0.01)
   if(x == nperm) cat("Permuted differences calculated")
 }
 
@@ -309,6 +311,5 @@ five.filename = paste("./alt_five_prime/", output.file, ".csv", sep = "")
 write.csv(final.three, file = three.filename, quote = FALSE, row.names = FALSE)
 write.csv(final.five, file = five.filename, quote = FALSE, row.names = FALSE)
 
-#save(out, file = "MDS_combined_mut_wt_junction_permutation_logOR_R_output.Rdata")
 message("Done!!")
 
