@@ -25,7 +25,7 @@ rule all:
 """ Clean intron.bed file """
 rule clean_bed:
   input:
-    "{workdir}/{outputdir}/{samples}/sicelore_outputs_{samples}/04b.matrices/molecules.tags.GE.bam"
+    "{workdir}/{outputdir}/{samples}/04b.matrices/molecules.tags.GE.bam"
     #"{workdir}/{outputdir}/{samples}/sicelore_outputs_{samples}/consensus_outputs/consensus.sorted.tags.GE.bam"
   output:
     "{workdir}/{outputdir}/{samples}/leafcutter_outputs_{samples}/intron.meta/leafviz_all_introns_cleaned.bed"
@@ -57,7 +57,7 @@ rule clean_bed:
 """ Run the python junction calling script """
 rule junc_call:
   input:
-    "{workdir}/{outputdir}/{samples}/sicelore_outputs_{samples}/04b.matrices/molecules.tags.GE.bam"
+    "{workdir}/{outputdir}/{samples}/04b.matrices/molecules.tags.GE.bam"
     #"{workdir}/{outputdir}/{samples}/sicelore_outputs_{samples}/consensus_outputs/consensus.sorted.tags.GE.bam"
   output:
     "{workdir}/{outputdir}/{samples}/leafcutter_outputs_{samples}/{samples}_exons.tsv.gz",
@@ -110,7 +110,6 @@ rule preproc:
     cd {params.samples}/leafcutter_outputs_{params.samples}
     mkdir -p exon.meta
     
-    module load R/4.1.2
     Rscript {params.run_files}/exon.annotation.final.V3.R {params.samples}_exons.tsv.gz exon.meta/ {params.samples} {params.run_files}/annotation_reference/leafviz
     echo "Done"
     """
@@ -139,7 +138,7 @@ rule ri_anno:
     cd {params.outputdir}
     cd {params.samples}/leafcutter_outputs_{params.samples}
 
-    module load R/4.1.2
+    
     Rscript {params.run_files}/retained.intron.annotation.V2.R exon.meta/{params.samples}_all.exons.info.txt {params.workdir}/{params.outputdir}/{params.samples}/leafcutter_outputs_{params.samples}/exon.meta/ {params.samples} {params.workdir}/{params.outputdir}/{params.samples}/leafcutter_outputs_{params.samples}/intron.meta/leafviz_all_introns_cleaned.bed
     echo "Done RI annotation script"
     """
@@ -168,7 +167,7 @@ rule intron_anno:
     cd {params.outputdir}
     cd {params.samples}/leafcutter_outputs_{params.samples}
     mkdir -p intron.meta
-    module load R/4.1.2    
+        
     Rscript {params.run_files}/junc_calling_script.R {params.samples}_introns.tsv.gz intron.meta/ {params.samples} {params.run_files}/annotation_reference/leafviz
     echo "Done intron annotation"
     """
@@ -226,7 +225,7 @@ rule strand_adjust:
     """
     cd {params.workdir}
     mkdir -p {params.outputdir}/{params.samples}/leafcutter_outputs_{params.samples}/intron.meta/{params.samples}_strand_adjusted_metadata
-    module load R/4.1.2
+    
     cd {params.outputdir}/{params.samples}/leafcutter_outputs_{params.samples}/intron.meta
 
     Rscript {params.run_files}/strand_adjustment.R {params.samples}_all.introns.info.w.primary.annotations.exonSkipping.txt {params.samples}_strand_adjusted_metadata

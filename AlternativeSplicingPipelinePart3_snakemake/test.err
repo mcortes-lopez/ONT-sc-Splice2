@@ -1,5 +1,0 @@
-Using profile ../AlternativeSplicingPipelinePart1_snakemake/profiles/profile_snakemake/ for setting default command line arguments.
-Config file config.yaml is extended by additional config specified via the command line.
-Building DAG of jobs...
-Nothing to be done (all requested files are present and up to date).
-Complete log: .snakemake/log/2024-01-29T140230.095077.snakemake.log
