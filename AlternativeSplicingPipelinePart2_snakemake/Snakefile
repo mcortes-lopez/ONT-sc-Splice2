@@ -18,6 +18,9 @@ rule all:
     expand("{workdir}/{outputdir}/{samples}/leafcutter_outputs_{samples}/intron.meta/{samples}_strand_adjusted_metadata/strand_adjusted_metadata.csv", workdir = WORKDIR, outputdir = OUTPUTDIR, samples = SAMPLES),
     expand("{workdir}/{outputdir}/DT_input/1.JuncCounts_matrix/{samples}_perind_numbers.counts.txt", workdir = WORKDIR, outputdir = OUTPUTDIR, samples = SAMPLES),
     expand("{workdir}/{outputdir}/DT_input/3.Junction_metadata/{samples}_strand_adjusted_metadata.csv", workdir = WORKDIR, outputdir = OUTPUTDIR, samples = SAMPLES),
+    expand("{workdir}/{outputdir}/DT_input/1.JuncCounts_matrix_exon/{samples}_per.exon_numbers.counts.txt", workdir = WORKDIR, outputdir = OUTPUTDIR, samples = SAMPLES),
+    expand("{workdir}/{outputdir}/DT_input/3.Junction_metadata_exon/{samples}_all.exons.info.wRIannotation.csv", workdir = WORKDIR, outputdir = OUTPUTDIR, samples = SAMPLES)
+
 
 #""" Generate Intron/3p/5p databases from GTF file (only need to do this once) """
 #rule generate_db:
@@ -35,7 +38,7 @@ rule clean_bed:
     workdir = "{workdir}",
     outputdir = "{outputdir}",
     run_files = RUN_FILES,
-    samples = "{samples}",
+    samples = "{samples}"
   log:
     "{workdir}/{outputdir}/logs/{samples}_clean_bed.txt"
   threads:
@@ -68,7 +71,7 @@ rule junc_call:
     workdir = "{workdir}",
     outputdir = "{outputdir}",
     run_files = RUN_FILES,
-    samples = "{samples}",
+    samples = "{samples}"
   log:
     "{workdir}/{outputdir}/logs/{samples}_junc_call.txt"
   threads:
@@ -91,7 +94,8 @@ rule preproc:
   input:
     "{workdir}/{outputdir}/{samples}/leafcutter_outputs_{samples}/{samples}_exons.tsv.gz"
   output:
-    "{workdir}/{outputdir}/{samples}/leafcutter_outputs_{samples}/exon.meta/{samples}_all.exons.info.txt"
+    "{workdir}/{outputdir}/{samples}/leafcutter_outputs_{samples}/exon.meta/{samples}_all.exons.info.txt",
+    "{workdir}/{outputdir}/{samples}/leafcutter_outputs_{samples}/exon.meta/{samples}_per.exon_numbers.counts.txt"
   params:
     job_name = "preproc",
     memory = "select[mem>100] rusage[mem=100]",
@@ -185,7 +189,7 @@ rule es_anno:
     workdir = "{workdir}",
     outputdir = "{outputdir}",
     run_files = RUN_FILES,
-    samples = "{samples}",
+    samples = "{samples}"
   log:
     "{workdir}/{outputdir}/logs/{samples}_es_anno.txt"
   threads:
@@ -216,7 +220,7 @@ rule strand_adjust:
     workdir = "{workdir}",
     outputdir = "{outputdir}",
     run_files = RUN_FILES,
-    samples = "{samples}",
+    samples = "{samples}"
   log:
     "{workdir}/{outputdir}/logs/{samples}_strand_adjust.txt"
   threads:
@@ -250,7 +254,7 @@ rule copy_files:
     memory = "select[mem>10] rusage[mem=10]",
     workdir = "{workdir}",
     outputdir = "{outputdir}",
-    samples = "{samples}",
+    samples = "{samples}"
   log:
     "{workdir}/{outputdir}/logs/{samples}_copy_files.txt"
   threads:
