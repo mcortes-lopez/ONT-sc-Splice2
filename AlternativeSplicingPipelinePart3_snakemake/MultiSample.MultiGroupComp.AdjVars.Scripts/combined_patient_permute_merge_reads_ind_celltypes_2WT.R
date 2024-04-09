@@ -179,8 +179,18 @@ for (sample in sample.names){
   five.shf.data.list[[sample]] = data.frame(intron_junction = five.data.comb$intron_junction, three_prime_ID=five.data.comb$three_prime_ID)
 }
 
+library(foreach)
+library(dplyr)
+library(doParallel)
 
-for(x in 0:nperm){
+# Set up parallel backend
+cl <- makeCluster(detectCores()-1)  # Use all available cores
+registerDoParallel(cl)
+
+# Parallelized loop for x in 0:nperm
+results_foreach <- foreach(x = 0:nperm) %dopar% {
+  set.seed(x)
+  library(dplyr)
 
   set.seed(x)
 
@@ -279,15 +289,19 @@ for(x in 0:nperm){
   three.shf.diff = abs(three.obs.ratio.num) > abs(three.shf.ratio.num)
   five.shf.diff = abs(five.obs.ratio.num) > abs(five.shf.ratio.num)
 
-  temp.three = temp.three + three.shf.diff
-  temp.five = temp.five + five.shf.diff
-
+  c(three.shf.diff, five.shf.diff)
   #progress(value = x, max.value = nperm, progress.bar = T)
-  if(x == nperm) cat("Permuted differences calculated")
+  #Sys.sleep(0.01)
+  #if(x == nperm) cat("Permuted differences calculated")
 }
 
-pvals.three = 1 - temp.three/(nperm + 1)
-pvals.five = 1 - temp.five/(nperm + 1)
+# Stop the parallel backend
+stopCluster(cl)
+
+pvals = 1 - colSums(do.call(rbind, results_foreach)) /(nperm +1)
+
+pvals.three = pvals[1:length(three.obs.ratio.num)]
+pvals.five = pvals[(length(three.obs.ratio.num)+1):length(pvals)]
 
 message("Creating final data frames")
 final.three = data.frame(pvalue = pvals.three, three.obs.logOR.ratio = three.obs.ratio.num, intron_junction = names(three.obs.ratio.num))

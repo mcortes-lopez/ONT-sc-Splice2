@@ -135,7 +135,18 @@ for (sample in sample.names){
 }
 
 
-for(x in 0:nperm){
+library(foreach)
+library(dplyr)
+library(doParallel)
+
+# Set up parallel backend
+cl <- makeCluster(detectCores()-1)  # Use all available cores
+registerDoParallel(cl)
+
+# Parallelized loop for x in 0:nperm
+results_foreach <- foreach(x = 0:nperm) %dopar% {
+  set.seed(x)
+  library(dplyr)
 
   set.seed(x)
 
@@ -201,12 +212,16 @@ for(x in 0:nperm){
 
   three.shf.diff = abs(three.obs.ratio.num) > abs(three.shf.ratio.num)
 
-  temp.three = temp.three + three.shf.diff
-
-  if(x == nperm) cat("Permuted differences calculated")
+  three.shf.diff
+  #progress(value = x, max.value = nperm, progress.bar = T)
+  #Sys.sleep(0.01)
+  #if(x == nperm) cat("Permuted differences calculated")
 }
 
-pvals.three = 1 - temp.three/(nperm + 1)
+# Stop the parallel backend
+stopCluster(cl)
+
+pvals.three = 1 - colSums(do.call(rbind, results_foreach)) /(nperm +1)
 
 message("Creating final data frames")
 final.three = data.frame(pvalue = pvals.three, three.obs.logOR.ratio = three.obs.ratio.num, exon_coordinates = names(three.obs.ratio.num))
