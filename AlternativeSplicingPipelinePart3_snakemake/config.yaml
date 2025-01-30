@@ -5,6 +5,8 @@ RUN_FILES:
   "path/to/snakemake_folder/MultiSample.MultiGroupComp.AdjVars.Scripts"
 RUN_FILESIR:
   "path/to/snakemake_folder/MultiSample.MultiGroupComp.AdjVars.Scripts.IR"
+INTRONBED_FILE:
+  "path/to/snakemake_folder/JunctionCalling.Pipeline.Scripts/annotation_reference/leafviz_all_introns_cleaned.bed"
 SAMPLES:
   - "MDS02A-chr21"
 NPERM:
