@@ -16,9 +16,10 @@ print(sample.names)
 
 ## load in metadata
 setwd(path.to.metadata)
-files = list.files(path.to.metadata)
-metadata.list = lapply(files, function(x) read.csv(file = x, stringsAsFactors = F))
-names(metadata.list) = sample.names
+files = grep(paste(sample.names, collapse = "|"), list.files(path.to.metadata), value = T)
+metadata.list = lapply(files, function(x) read.csv(file = x, stringsAsFactors = F, sep=","))
+positions <- sapply(sample.names, function(sample) grep(sample, files))
+names(metadata.list)[positions] <- sample.names
 
 ## identify strand adjusted start and end site
 for (sample in sample.names) {
@@ -38,6 +39,7 @@ for (sample in sample.names) {
 metadata = do.call(rbind, metadata.list)
 metadata$five_prime_ID = metadata %>% group_by(chr, five_prime, strand) %>% group_indices()
 metadata$three_prime_ID = metadata %>% group_by(chr, three_prime, strand) %>% group_indices()
+
 metadata$five_prime_ID = gsub("^", "clu_", metadata$five_prime_ID)
 metadata$three_prime_ID = gsub("^", "clu_", metadata$three_prime_ID)
 #metadata$sample = rownames(metadata)

@@ -6,6 +6,8 @@ library(dplyr)
 library(data.table)
 library(stringr)
 
+Sys.setenv("VROOM_CONNECTION_SIZE" = 100000000)
+
 
 option_parser=OptionParser(
   usage="%prog [options] <name>_counts_sc_txt.gz path/to/output_folder output_prefix path/to/annotation_code/prefix_"
@@ -22,10 +24,10 @@ cat("Results to be saved in:",output_folder, "\n")
 
 output <- paste0(output_folder,"/",output_prefix)
 
-dat = read_tsv(input_matrix)
-print("Saving matrix as an R object")
-saveRDS(dat, version=2, paste0(output,"_counts_sc.rda"))
-print("Done")
+dat = bigreadr::big_fread2(input_matrix, data.table = F)
+#print("Saving matrix as an R object")
+#saveRDS(dat, version=2, paste0(output,"_counts_sc.rda"))
+#print("Done")
 
 #dat = readRDS("/gpfs/commons/home/pchamely/leafcutter_scripts/p1_output/p1_ont_v2_align_test/p1_align_smartseq_counts_sc.rda")
 
@@ -37,9 +39,9 @@ counts = dat[,5:ncol(dat)]
 junc_meta$intron_junction <- paste(junc_meta$chrom, ":", junc_meta$start, ":", junc_meta$end,":",junc_meta$strand, sep = "")
 
 #Save count matrix
-perind_numbers.counts <- bind_cols(junc_meta[,c("intron_junction")], counts)
+perind_numbers.counts <- bind_cols("intron_junction" = junc_meta[,c("intron_junction")], counts)
 print("Writing out full count matrix table")
-write.table(perind_numbers.counts, file= paste0(output ,"_perind_numbers.counts.txt") , row.names = F, col.names = T, quote = F, sep = " " )
+fwrite(perind_numbers.counts, file= paste0(output ,"_perind_numbers.counts.txt") , row.names = F, col.names = T, quote = F, sep = " " )
 print("Done")
 
 #perind_numbers.counts[duplicated(perind_numers.counts$intron_junction),] %>% arrange(intron_junction)
@@ -78,12 +80,19 @@ all.introns = all.introns %>% mutate(five_prime = ifelse(strand_1 =="+", start, 
                                      three_prime = ifelse(strand_1 =="+", end, start))
 
 #Five prime groups
-fp_groups = all.introns %>% group_indices(chr, five_prime)
-all.introns$clusterID_5p <- paste("clu_" ,fp_groups, sep="")
+#fp_groups = all.introns %>% group_indices(chr, five_prime)
+#all.introns$clusterID_5p <- paste("clu_" ,fp_groups, sep="")
 
 #Three prime groups
-tp_groups = all.introns %>% group_indices(chr, three_prime)
-all.introns$clusterID_3p <- paste("clu_" ,tp_groups, sep="")
+#tp_groups = all.introns %>% group_indices(chr, three_prime)
+#all.introns$clusterID_3p <- paste("clu_" ,tp_groups, sep="")
+
+
+setDT(all.introns)
+all.introns[, clusterID_5p := paste0("clu_", .GRP), by = .(chr, five_prime)]
+# Group by 'chr' and 'three_prime' using .GRP (equivalent to dplyr::group_indices)
+all.introns[, clusterID_3p := paste0("clu_", .GRP), by = .(chr, three_prime)]
+all.introns <- as.data.frame(all.introns)
 
 ##--------added in here------##
 
@@ -125,136 +134,165 @@ print("finished making 5' database")
 all.introns$start_match <- NA
 all.introns$end_match <- NA
 
+print("calculate unique matches")
 ##try putting this before and if it works then see if you can create a new row with the adjusted start and end positions of the junctions!!!
-for (chrom in unique(all.introns$chr)){
+# Convert to data.table
+setDT(all.introns)
+setDT(fiveprime_db)
+setDT(threeprime_db)
 
-  all.introns[which(all.introns$chr == chrom),]$start_match <- sapply(all.introns[which(all.introns$chr == chrom),]$start, function(x) fiveprime_db[which(fiveprime_db$chr == chrom),]$start[order(abs(x - fiveprime_db[which(fiveprime_db$chr == chrom),]$start))][1])
-  all.introns[which(all.introns$chr == chrom),]$end_match <- sapply(all.introns[which(all.introns$chr == chrom),]$end, function(x) threeprime_db[which(threeprime_db$chr == chrom),]$start[order(abs(x - threeprime_db[which(threeprime_db$chr == chrom),]$start))][1])
+# Initialize start_match and end_match as numeric columns
+all.introns$start_match <- NA
+all.introns$end_match <- NA
 
+all.introns[, `:=` (start_match = as.integer(start_match), end_match = as.integer(end_match))]
+
+# Function to get the closest match
+find_closest <- function(query, db) {
+  sapply(query, function(x) {
+    if (length(db) == 0) return(NA_integer_)
+    sorted_db <- db[order(abs(x - db))]
+    return(sorted_db[1])
+  })
 }
 
-all.introns$start_diff <- all.introns$start - all.introns$start_match
-all.introns$end_diff <- all.introns$end - all.introns$end_match
-
-##Strand adjust the 5p and 3p distances:
-all.introns$fivep_diff <- NA 
-all.introns$threep_diff <- NA
-
-all.introns[which(all.introns$strand_1 == "+"), ]$fivep_diff <- all.introns[which(all.introns$strand_1 == "+"), ]$start_diff
-all.introns[which(all.introns$strand_1 == "+"), ]$threep_diff <- all.introns[which(all.introns$strand_1 == "+"), ]$end_diff
+# Loop over chromosomes
+for (chrom in unique(all.introns$chr)) {
+  # Subset by chromosome
+  introns_chr <- all.introns[chr == chrom]
+  five_chr <- fiveprime_db[chr == chrom, .(start)]
+  three_chr <- threeprime_db[chr == chrom, .(start)]
   
-all.introns[which(all.introns$strand_1 == "-"),]$fivep_diff <- (all.introns[which(all.introns$strand_1 == "-"), ]$end_diff)*-1
-all.introns[which(all.introns$strand_1 == "-"),]$threep_diff <- (all.introns[which(all.introns$strand_1 == "-"), ]$start_diff)*-1
+  # Find closest matches
+  start_matches <- find_closest(introns_chr$start, five_chr$start)
+  end_matches <- find_closest(introns_chr$end, three_chr$start)
+  
+  # Update the main data.table with matched values
+  all.introns[chr == chrom, start_match := start_matches]
+  all.introns[chr == chrom, end_match := end_matches]
+}
 
+print("successfull unique matches")
+
+# Calculate differences
+all.introns[, `:=` (start_diff = start - start_match, end_diff = end - end_match)]
+
+# Strand adjustment
+all.introns[, `:=` (fivep_diff = NA_real_, threep_diff = NA_real_)]
+all.introns[strand_1 == "+", `:=` (fivep_diff = start_diff, threep_diff = end_diff)]
+all.introns[strand_1 == "-", `:=` (fivep_diff = -end_diff, threep_diff = -start_diff)]
 
 ##Create all the intersection databases
 all.introns_intersect = all.junctions %>%
-  left_join(intron_db, by=c("chr","start","end"))
+  collapse::join(intron_db, how= "left", on=c("chr","start","end"))
 
 #all.introns_intersect[which(all.introns_intersect$gene == "DYNLL1"),]
 
 threeprime_intersect = all.junctions %>%
   select(chr, clusterID, start=end) %>%
-  left_join(threeprime_db, by=c("chr","start"))
+  collapse::join(threeprime_db, how= "left", on=c("chr","start"))
 
 fiveprime_intersect =  all.junctions %>%
   select(chr, clusterID, start) %>%
-  left_join(fiveprime_db, by=c("chr","start"))
+  collapse::join(fiveprime_db, how= "left", on=c("chr","start"))
 
 print("Annotating junctions")
 
-verdict.list <- list()
-strand.list <- list()
-coord.list <- list()
-gene.list <- list()
-ensemblID.list <- list()
-transcripts.list <- list()
-constitutive.list <- list()
+library(data.table)
+library(foreach)
+library(doParallel)
+
+
+# Set up parallel backend
+total_cores <- length(parallelly::availableWorkers()) 
+use_cores <- max(1, total_cores - 2) # Leave two cores free for system stability
+print(paste0("Using ", use_cores, " cores"))
+cl <- makeCluster(use_cores)
+registerDoParallel(cl)
+
+# Convert data frames to data.tables
+setDT(all.junctions)
+setDT(fiveprime_intersect)
+setDT(threeprime_intersect)
+setDT(all.introns_intersect)
 
 clusters <- unique( all.junctions$clusterID)
 
-for( clu in clusters){
-  # for each intron in the cluster, check for coverage of both
-  # output a vector of string descriptions
-  cluster <- all.junctions %>% filter( clusterID == clu )
+# Initialize lists to store results
+verdict.list <- vector("list", length(clusters))
+strand.list <- vector("list", length(clusters))
+coord.list <- vector("list", length(clusters))
+gene.list <- vector("list", length(clusters))
+ensemblID.list <- vector("list", length(clusters))
+transcripts.list <- vector("list", length(clusters))
+constitutive.list <- vector("list", length(clusters))
 
-  # first subset the intersected files to speed up later query - this uses the data.tables method
-  fprimeClu <- fiveprime_intersect %>% filter( clusterID == clu )
-  tprimeClu <- threeprime_intersect %>% filter( clusterID == clu )
-  bothSSClu <- all.introns_intersect %>% filter( clusterID == clu )
-
-
-  # for each intron in the cluster:
-  # create vector of overlapping splice sites, indexed by the row of the intersect
-
-  # five prime splice sites
-  fprime=cluster %>% left_join(fprimeClu, by=c("chr","start"))
-
-  # three prime splice sites
-  tprime=cluster %>% left_join(tprimeClu, by=c("chr"="chr","end"="start"))
-
-  # both splice sites
-  bothSS=cluster %>% left_join(bothSSClu, by=c("chr","start","end"))
-
-  # find gene and ensemblID by the most represented gene among all the splice sites - lazy
-  cluster_gene <- names(sort(table(c(tprime$gene,fprime$gene)), decreasing = TRUE ))[1]
-
-    # if no cluster gene found then leave as "."
-  if( is.null(cluster_gene) ){
-    cluster_gene <- "."
-  }
-
-  gene_strand <- NA
-  if( cluster_gene != "." ){
-    # get strand the same way - would prefer to use the strand of the junction
-    strands <- c(tprime$strand, fprime$strand)
-    # hope that all junctions align to the same gene on the same strand
-    gene_strand <- unique( strands[ strands != "." & !is.na(strands) ])
-    if( all(is.na(gene_strand)) | length(gene_strand) != 1 ){
-      gene_strand <- NA
-    }
-  }
-# do the same for EnsemblID
-  cluster_ensemblIDs <- names(sort(table( c(tprime$gene_id,fprime$gene_id)), decreasing = TRUE ))
-  cluster_ensemblID <- cluster_ensemblIDs[ cluster_ensemblIDs != "." ][1]
-
-  #BAD CODE
-  #if( length( cluster_ensemblID ) == 0 ){
-  #  cluster_ensemblID == "."
-  #}
-
-  #NEW CODE
-  if( length( cluster_ensemblID ) == 0 ){
-    cluster_ensemblID <- "."
-  }
-
-  verdict <- c()
-  coord <- c()
-  gene <- c()
-  strand <- c()
-  ensemblID <- c()
-  transcripts <- list()
-
+# Parallelize the cluster loop
+results <- foreach(clu = clusters, .packages = c("data.table", "dplyr")) %dopar% {
+  # Subset cluster-specific data
+  cluster <- all.junctions[clusterID == clu]
+  fprimeClu <- fiveprime_intersect[clusterID == clu]
+  tprimeClu <- threeprime_intersect[clusterID == clu]
+  bothSSClu <- all.introns_intersect[clusterID == clu]
   
-  for( intron in 1:nrow(cluster) ){
-
-    coord[intron] <- paste(cluster[intron,]$chr,cluster[intron,]$start, cluster[intron,]$end )
-    strand[intron] <- gene_strand
-    gene[intron] <- cluster_gene
-    ensemblID[intron] <- cluster_ensemblID
-
-    fprime_intron=cluster[intron,] %>% left_join(fprime, by=c("chr","start"))
-    tprime_intron=cluster[intron,] %>% left_join(tprime, by=c("chr","end"))
-    bothSS_intron=cluster[intron,] %>% left_join(bothSSClu, by=c("chr","start","end"))
-
-    # for each intron create vector of all transcripts that contain both splice sites
-    transcripts[[intron]] <- intersect( tprime_intron$transcript,fprime_intron$transcript )
-
-    verdict[intron] <- "error"
-
-    unknown_3p=all( is.na(tprime_intron$gene) )
-    unknown_5p=all( is.na(fprime_intron$gene) )
-
+  # Join to find matching splice sites
+  fprime <- cluster[fprimeClu, on = .(chr, start), allow.cartesian = TRUE]
+  tprime <- cluster[tprimeClu, on = .(chr, end = start), allow.cartesian = TRUE]
+  bothSS <- cluster[bothSSClu, on = .(chr, start, end), , allow.cartesian = TRUE]
+  
+  # Find the most represented gene and Ensembl ID
+  cluster_gene <- names(sort(table(c(tprime$gene, fprime$gene)), decreasing = TRUE))[1]
+  cluster_gene <- ifelse(is.null(cluster_gene), ".", cluster_gene)
+  
+  gene_strand <- if (cluster_gene != ".") {
+    strands <- c(tprime$strand, fprime$strand)
+    unique_strand <- unique(strands[!is.na(strands) & strands != "."])
+    if (length(unique_strand) == 1) unique_strand else NA
+  } else {
+    NA
+  }
+  
+  cluster_ensemblIDs <- names(sort(table(c(tprime$gene_id, fprime$gene_id)), decreasing = TRUE))
+  cluster_ensemblID <- cluster_ensemblIDs[cluster_ensemblIDs != "."][1]
+  cluster_ensemblID <- ifelse(length(cluster_ensemblID) == 0, ".", cluster_ensemblID)
+  
+  # Initialize vectors for the current cluster
+  verdict <- rep("error", nrow(cluster))
+  coord <- paste(cluster$chr, cluster$start, cluster$end)
+  gene <- rep(cluster_gene, nrow(cluster))
+  strand <- rep(gene_strand, nrow(cluster))
+  ensemblID <- rep(cluster_ensemblID, nrow(cluster))
+  transcripts <- vector("list", nrow(cluster))
+  
+  # Loop over introns to fill in details
+  for (intron in seq_len(nrow(cluster))) {
+    fprime_intron <- fprime[cluster[intron], on = .(chr, start), allow.cartesian = TRUE]
+    tprime_intron <- tprime[cluster[intron], on = .(chr, end), allow.cartesian = TRUE]
+    bothSS_intron <- bothSSClu[cluster[intron], on = .(chr, start, end), allow.cartesian = TRUE]
+    
+    transcripts[[intron]] <- intersect(tprime_intron$transcript, fprime_intron$transcript)
+    
+    unknown_3p <- all(is.na(tprime_intron$gene))
+    unknown_5p <- all(is.na(fprime_intron$gene))
+    
+    #if (is.na(gene_strand)) {
+    #  verdict[intron] <- "unknown_strand"
+    #} else {
+    #  if (unknown_3p && unknown_5p) {
+    #    verdict[intron] <- "cryptic_unanchored"
+    #  } else if ((unknown_3p && all(!is.na(fprime_intron$gene)) && gene_strand == "+") ||
+    #             (unknown_5p && all(!is.na(tprime_intron$gene)) && gene_strand == "-")) {
+    #    verdict[intron] <- "cryptic_threeprime"
+    #  } else if ((unknown_5p && all(!is.na(tprime_intron$gene)) && gene_strand == "+") ||
+    #             (unknown_3p && all(!is.na(fprime_intron$gene)) && gene_strand == "-")) {
+    #    verdict[intron] <- "cryptic_fiveprime"
+    #  } else if (!is.na(gene_strand) && (any(!is.na(tprime_intron$gene)) || any(!is.na(fprime_intron$gene)))) {
+    #   verdict[intron] <- "cryptic"
+    #  } else if (all(!is.na(tprime_intron$gene)) && all(!is.na(fprime_intron$gene))) {
+    #    verdict[intron] <- if (all(!is.na(bothSS_intron$gene))) "annotated" else "novel annotated pair"
+    #  }
+    
+    
     if (is.na(gene_strand)) {
       verdict[intron] <- "unknown_strand"
     } else {
@@ -262,7 +300,7 @@ for( clu in clusters){
         verdict[intron] <- "cryptic_unanchored"
       }
       if( (all( is.na(tprime_intron$gene )) & all( !is.na(fprime_intron$gene ) ) & all(gene_strand == "+") ) |
-        ( all( is.na(fprime_intron$gene )) & all( !is.na(tprime_intron$gene ) ) & all(gene_strand == "-") )
+          ( all( is.na(fprime_intron$gene )) & all( !is.na(tprime_intron$gene ) ) & all(gene_strand == "-") )
       ){ verdict[intron] <- "cryptic_threeprime"
       }
       if(
@@ -282,64 +320,50 @@ for( clu in clusters){
         }else{ # both are annotated but never in the same junction
           verdict[intron] <- "novel annotated pair"
         }
+        
       }
     }
-    
-    verdict.list[[clu]] <- verdict
-    coord.list[[clu]] <- coord
-    gene.list[[clu]] <- gene
-    strand.list[[clu]] <- strand
-    ensemblID.list[[clu]] <- ensemblID
-  
-    # once all the transcripts for all the introns are found, go back and work out how many constitutive each junction is. Does the junction appear in every transcript?
-
-    if( intron == nrow(cluster)){ # only on final intron
-      all_transcripts <- unique( unlist( transcripts ) )
-      # remove "." - non-existent transcripts
-      all_transcripts <- all_transcripts[ all_transcripts != "." ]
-
-      constitutive <- lapply( transcripts, FUN = function(x) {
-        # for each intron how many transcripts is it seen in?
-        x <- x[ x != "." ]
-        length(x) / length( all_transcripts)
-
-        })
-
-      constitutive.list[[clu]] <- constitutive
-
-      # collapse all.introns transcripts for each intron into a single string
-      transcripts.list[[clu]] <- lapply(transcripts, FUN = function(x) paste( x, collapse = "+" ) )
-
-    }
-
   }
-
+  
+  
+  # Calculate constitutive score
+  all_transcripts <- unique(unlist(transcripts))
+  all_transcripts <- all_transcripts[all_transcripts != "."]
+  constitutive <- sapply(transcripts, function(x) length(x[x != "."]) / length(all_transcripts))
+  
+  # Return results for the current cluster
+  list(
+    verdict = verdict,
+    coord = coord,
+    gene = gene,
+    strand = strand,
+    ensemblID = ensemblID,
+    transcripts = sapply(transcripts, paste, collapse = "+"),
+    constitutive = constitutive
+  )
 }
 
-print("Preparing results")
+stopCluster(cl)
 
-# match the lists together
-all.introns$strand <- unlist(strand.list)[ match( paste(all.introns$chr, all.introns$start, all.introns$end ), unlist(coord.list)) ]
+results <- rbindlist(results)
 
-all.introns$verdict <- unlist(verdict.list)[ match( paste(all.introns$chr, all.introns$start, all.introns$end ), unlist(coord.list)) ]
+setDT(all.introns)
+# Ensure 'coord' exists in both tables
+all.introns[, coord := sprintf("%s %s %s", chr, start, end)]
+# Set 'coord' as the key in both tables for efficient joining
+setkey(all.introns, coord)
+setkey(results, coord)
 
-all.introns$gene <- unlist(gene.list)[ match( paste( all.introns$chr, all.introns$start, all.introns$end ), unlist(coord.list)) ]
+# Perform the merge (this is efficient due to indexing)
+all.introns <- all.introns[results, nomatch = 0]  # nomatch=0 excludes non-matching rows
+all.introns[, constitutive.score := signif(constitutive, digits = 2)]
 
-all.introns$ensemblID <- unlist(ensemblID.list)[ match( paste( all.introns$chr, all.introns$start, all.introns$end ), unlist(coord.list)) ]
 
-all.introns$transcripts <- unlist( transcripts.list )[ match( paste( all.introns$chr, all.introns$start, all.introns$end ), unlist(coord.list)) ]
-
-all.introns$constitutive.score <-  unlist( constitutive.list )[ match( paste( all.introns$chr, all.introns$start, all.introns$end ), unlist(coord.list)) ]
-
-#all.introns$prediction <-  unlist( classification.list )[ match( paste( all.introns$chr, all.introns$start, all.introns$end ), unlist(coord.list)) ]
-
-# replace NA values/missing transcripts with "."      ??? SHould i add the start_match and end_match to this list - should not have any missing values
-
-all.introns %<>% mutate( gene=ifelse(is.na(gene), ".", gene),
-                         ensemblID=ifelse(is.na(ensemblID), ".", ensemblID),
-                         transcripts=ifelse(transcripts == "", ".", transcripts),
-                         constitutive.score=signif(constitutive.score, digits = 2))
-
+# Final adjustments
+all.introns[, gene := ifelse(is.na(gene), ".", gene)]
+all.introns[, ensemblID := ifelse(is.na(ensemblID), ".", ensemblID)]
+all.introns[, transcripts := ifelse(transcripts == "", ".", transcripts)]
+all.introns[, constitutive.score := ifelse(is.na(constitutive.score), ".", constitutive.score)]
 
 print("Summary Counts for each junc type:")
 table(all.introns$verdict)
@@ -348,10 +372,9 @@ nrow(all.introns)
 
 print("Saving Introns info")
 
-all_introns_meta <- all.introns
+all_introns_meta <- as.data.frame(all.introns)
 
 save(all_introns_meta,version=2, file = paste0(output,"_all.introns.info.Rdata") )
 write.table(all_introns_meta, file= paste0(output, "_all.introns.info.txt"), quote=F, sep="\t")
 
 print("Done")
-

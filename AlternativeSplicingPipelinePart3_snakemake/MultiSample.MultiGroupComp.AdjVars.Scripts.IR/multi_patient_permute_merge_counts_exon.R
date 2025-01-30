@@ -9,6 +9,8 @@ library(tidyverse)
 library(matrixStats)
 
 args = commandArgs(TRUE)
+options(dplyr.summarise.inform = FALSE)
+
 path.to.split = args[1]
 path.to.cell.meta = args[2]
 comp.groups.column = args[3] #e.g. genotype labels
@@ -56,29 +58,29 @@ message("Matrix loaded")
 ##Then we won't have to include these arguments again??
 
 cell.meta.list = list()
-setwd(path.to.cell.meta)
-i = 1
-for (file in list.files(path.to.cell.meta)){
-  
-  cell.meta = as.data.frame(read.table(file, stringsAsFactors = F))
+cell.meta.files <- grep(paste0(sample.names, collapse = "|"), list.files(path.to.cell.meta, full.names = T), value = T)
+
+for (file in cell.meta.files){
+  id <- gsub("_metadata.txt", "", file)
+  cell.meta = as.data.frame(read.table(file, stringsAsFactors = F, sep = "\t"))
   cell.meta = cell.meta[!is.na(cell.meta[,cell.groups.column]),]
   cell.meta = cell.meta[,c(cell.groups.column, comp.groups.column)]
   print("Removing Pattern on cell barcode")
   rownames(cell.meta) = unlist(lapply(strsplit(rownames(cell.meta), split="_"), "[",1))
   ##You will have the same cell barcodes in the colnames of the three prime and five prime matircies
-  sum(rownames(cell.meta) %in% colnames(three.mtx.list[[i]]))
-  cell.meta = cell.meta[rownames(cell.meta) %in% colnames(three.mtx.list[[i]]),]
+  sum(rownames(cell.meta) %in% colnames(three.mtx.list[[id]]))
+  cell.meta = cell.meta[rownames(cell.meta) %in% colnames(three.mtx.list[[id]]),]
   ##keeps only the cell belonging to the 2 groups you're comparing
   cell.meta.sub = cell.meta[!is.na(cell.meta[,comp.groups.column]),]
-  
-  cell.meta.list[[sample.names[i]]] = cell.meta.sub
-  i = i+1
+  cell.meta.list[[id]] = cell.meta.sub
 }
 
 message("Cell meta data loaded")
 
 setwd(path.to.three.data)
-files = list.files(path.to.three.data)
+#files = list.files(path.to.three.data)
+files = grep(paste0(sample.names, collapse = "|"), list.files(path.to.three.data), value = T)
+
 ##We created 2 files but we are only reading one ????? remove this 
 three.data.comb = read.csv(files[1])
 
@@ -134,19 +136,20 @@ for (sample in sample.names){
   three.shf.data.list[[sample]] = data.frame(exon_coordinates = three.data.comb$exon_coordinates, five_prime_ID=three.data.comb$five_prime_ID)
 }
 
-
-library(foreach)
+#library(foreach)
 library(dplyr)
-library(doParallel)
+library(parallel)
+library(pbapply)  # For progress bar with mclapply
 
 # Set up parallel backend
-cl <- makeCluster(detectCores()-1)  # Use all available cores
-registerDoParallel(cl)
+total_cores <- length(parallelly::availableWorkers()) -1
+#cl <- makeCluster(total_cores-1)  # Use all available cores
+#registerDoParallel(cl)
+sprintf("using %d cores", total_cores)
 
 # Parallelized loop for x in 0:nperm
-results_foreach <- foreach(x = 0:nperm) %dopar% {
-  set.seed(x)
-  library(dplyr)
+results_foreach <- pblapply(1:nperm, function(x){
+
 
   set.seed(x)
 
@@ -168,8 +171,8 @@ results_foreach <- foreach(x = 0:nperm) %dopar% {
     three.shf.data = three.shf.data.list[[sample]]
 
     ##Only grabbing counts from the per patient count matrix
-    three.shf.data$shf.group2 = rowSums(three.mtx.list[[sample]][,colnames(three.mtx.list[[sample]]) %in% group2])
-    three.shf.data$shf.group1 = rowSums(three.mtx.list[[sample]][,colnames(three.mtx.list[[sample]]) %in% group1])
+    three.shf.data$shf.group2 = rowSums(three.mtx.list[[sample]][,colnames(three.mtx.list[[sample]]) %in% group2, drop = FALSE])
+    three.shf.data$shf.group1 = rowSums(three.mtx.list[[sample]][,colnames(three.mtx.list[[sample]]) %in% group1, drop = FALSE])
     three.shf.data$total.reads.per.junction = three.shf.data$shf.group2+three.shf.data$shf.group1
     three.shf.data.list[[sample]] = three.shf.data
     
@@ -216,10 +219,10 @@ results_foreach <- foreach(x = 0:nperm) %dopar% {
   #progress(value = x, max.value = nperm, progress.bar = T)
   #Sys.sleep(0.01)
   #if(x == nperm) cat("Permuted differences calculated")
-}
+},  cl = total_cores)
 
 # Stop the parallel backend
-stopCluster(cl)
+#stopCluster(cl)
 
 pvals.three = 1 - colSums(do.call(rbind, results_foreach)) /(nperm +1)
 

@@ -229,6 +229,7 @@ def splice_annotator(input_df, ref_df, ref_df_clean):
         tags = transcript_tag_finder(curr_ref_df)
         tags = tag_sorter(tags)
         num_tags = len(tags)
+        curr_input_df = input_df[input_df['gene'] == gene].copy()
         curr_input_df['numTags'] = len(tags)
         curr_input_df['tags'] = ', '.join(tags)
         nans = [np.nan]*curr_input_df.shape[0]

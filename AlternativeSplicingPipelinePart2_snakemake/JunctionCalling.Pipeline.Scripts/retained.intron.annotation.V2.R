@@ -18,7 +18,7 @@ intron_bed <- parsed_args$args[4]
 
 #exons <- read.csv(paste0( "/gpfs/commons/groups/landau_lab/SF3B1_splice_project/21.exon.centric.calling/",patient,"/leafcutter_outputs/exon.meta/",patient,"_all.exons.info.txt"), sep="\t")
 #exons <- read.csv(paste0( "/gpfs/commons/groups/landau_lab/rraviram/Suva_lab_GBM/Splicing_ONT/BAM_Paulina/",patient,"/leafcutter_outputs/exon.meta/",patient,"_all.exons.info.txt"), sep="\t")
-exons <- read.csv(input.exon.meta, sep="\t")
+exons <- unique(read.csv(input.exon.meta, sep="\t"))
 
 ##Making an intron database
 #paste("zcat < ",all_introns)
@@ -76,7 +76,17 @@ exons$intron_junction <- exons$exon_coordinates
 exon.counts <- fread(paste0(output_folder,output_prefix,"_per.exon_numbers.counts.txt"), sep =" ")
 exon.counts <- as.data.frame(exon.counts)
 rownames(exon.counts) <- exon.counts$exon_coordinates 
-exons$total.cov <- rowSums(exon.counts[,-1])
+
+#Remove duplicated records 
+# Convert to data.table
+setDT(exons)
+# Sort by exon_coordinates and descending constitutive, then select the first row in each group
+exons_result <- exons[order(exon_coordinates, -constitutive), .SD[1], by = exon_coordinates]
+exons <- as.data.frame(exons_result)
+# Optionally, exons_result is already 'ungrouped' since data.table doesn't explicitly group the data
+#exon.counts[exons$exon_coordinates, -1]
+print("Final step")
+exons$total.cov <- rowSums(exon.counts[exons$exon_coordinates, -1])
 
 #write.csv(exons, file=paste0("/gpfs/commons/groups/landau_lab/SF3B1_splice_project/21.exon.centric.calling/",patient,"/leafcutter_outputs/exon.meta/",patient,"_all.exons.info.wRIannotation.csv"))
-write.csv(exons, file=paste0(output_folder,output_prefix,"_all.exons.info.wRIannotation.csv"))
+fwrite(exons, file=paste0(output_folder,output_prefix,"_all.exons.info.wRIannotation.csv"), sep=",")

@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH --mem=64g
-#SBATCH --cpus-per-task=4
-#SBATCH --output=logs/stdout_%j.log 
+#SBATCH --cpus-per-task=10
+#SBATCH --output=logs/combined_permutations_%j.log 
 
 #########################################
 ### This script submits the script that permutes the combined patient data by merging all counts before calculating log odds ratio 

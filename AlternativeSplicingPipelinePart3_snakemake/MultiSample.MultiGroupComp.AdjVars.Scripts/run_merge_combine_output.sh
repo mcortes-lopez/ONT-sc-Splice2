@@ -1,6 +1,7 @@
 #!/bin/bash
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=10
 #SBATCH --mem=32g 
+#SBATCH --job-name=combine_output
 
 run_files=$1
 outputsdir=$2

@@ -28,9 +28,9 @@ cat("Results to be saved in:",output_folder, "\n")
 
 output <- paste0(output_folder,"/",output_prefix)
 
-dat = fread(input_matrix)
+dat = bigreadr::big_fread2(input_matrix)
 print("Saving matrix as an R object")
-saveRDS(dat, version=2, paste0(output,"_counts_sc.rda"))
+#saveRDS(dat, version=2, paste0(output,"_counts_sc.rda"))
 print("Done")
 
 #dat = readRDS(paste0("/gpfs/commons/groups/landau_lab/SF3B1_splice_project/21.exon.centric.calling/",patient,"/output_files/leafcutter_outputs/exon.meta/",patient,"_counts_sc.rda"))

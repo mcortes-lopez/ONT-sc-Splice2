@@ -9,16 +9,12 @@ sample.names = args[3]
 sample.names = unlist(strsplit(sample.names, split = ","))
 print(sample.names)
 
-
-
-
-
-
 ## load in metadata
 setwd(path.to.metadata)
-files = list.files(path.to.metadata)
+files = grep(paste(sample.names, collapse = "|"), list.files(path.to.metadata), value = T)
 metadata.list = lapply(files, function(x) read.csv(file = x, stringsAsFactors = F))
-names(metadata.list) = sample.names
+positions <- sapply(sample.names, function(sample) grep(sample, files))
+names(metadata.list)[positions] <- sample.names
 
 ## identify strand adjusted start and end site
 for (sample in sample.names) {
@@ -47,7 +43,4 @@ metadata$three_prime_ID = gsub("^", "clu_", metadata$three_prime_ID)
 ## write output
 setwd(output.dir)
 write.csv(metadata, "combined_metadata.csv", quote = FALSE, row.names = FALSE)
-
-#write.csv(metadata, "/gpfs/commons/home/ahawkins/MDS_ONT_splice/Junction_matrix_processing/MDS_combined/6.combined_metadata/MDS_combined_metadata.txt", quote = FALSE)
-#metadata = read.csv("/gpfs/commons/home/ahawkins/MDS_ONT_splice/Junction_matrix_processing/MDS_combined/6.combined_metadata/MDS_combined_metadata.txt", stringsAsFactors = FALSE, row.names = 1)
 
