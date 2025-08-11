@@ -1,8 +1,8 @@
-# ONT-sc-Splice: Generation of splicing junction matrices 
+# ONT-sc-Splice: Differential Splicing Analysis
 <!-- TOC -->
 <!-- TOC -->
 
-- [ONT-sc-Splice: Generation of splicing junction matrices](#ont-sc-splice-generation-of-splicing-junction-matrices)
+- [ONT-sc-Splice: Differential Splicing Analysis](#ont-sc-splice-differential-splicing-analysis)
     - [Preparation](#preparation)
         - [Config File](#config-file)
     - [Running workflow](#running-workflow)
@@ -20,7 +20,7 @@ Given that the analysis relies in junctions and exon-junctions (intron retention
 - Exon skipping * 
 - Intron retention *
 
-* Limited 
+\* *Limited* 
 
 Thus additional events such as mixed exons or alternative 5' TSS and 3' alternative polyadenylation sites are limited. 
 
