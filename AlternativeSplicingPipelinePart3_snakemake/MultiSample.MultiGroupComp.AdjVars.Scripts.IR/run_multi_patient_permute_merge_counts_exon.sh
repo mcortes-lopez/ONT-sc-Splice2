@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --mem=64g
+#SBATCH --time=3-00:00:00
 #SBATCH --cpus-per-task=10
 #SBATCH --output=logs/permutations_ir_%j.log 
 

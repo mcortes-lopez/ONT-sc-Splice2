@@ -14,9 +14,6 @@ import numpy as np
 file = sys.argv[1]
 output = sys.argv[2]
 
-#import the intron bed file
-#file = '/Users/lkluegel/Downloads/leafviz_all_introns.bed'
-#output = '/Users/lkluegel/Downloads/leafviz_all_introns_cleaned.bed'
 
 df = pd.read_csv(file, sep='\t', header=None)
 #get list of genes
@@ -76,5 +73,4 @@ for gene in genes:
     
 df2 = pd.concat(df_list)
 
-#df2.to_csv('/Users/lkluegel/Documents/Splicing/Fede_Ally_Paulina/Annotator/Data/leafviz_all_introns_cleaned.bed', header=None, index=False, sep='\t')
 df2.to_csv(output, header=None, index=False, sep='\t')

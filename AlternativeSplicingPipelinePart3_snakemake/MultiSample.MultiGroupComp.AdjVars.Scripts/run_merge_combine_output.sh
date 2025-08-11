@@ -1,7 +1,10 @@
 #!/bin/bash
+#SBATCH --time=3-00:00:00
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=32g 
 #SBATCH --job-name=combine_output
+#SBATCH --output=%x.log
+
 
 run_files=$1
 outputsdir=$2

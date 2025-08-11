@@ -1,6 +1,5 @@
 WORKDIR:
   "path/to/snakemake_folder/minimal_example"
-  #"/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/minimal_example"
 RUN_FILES:
   "path/to/snakemake_folder/MultiSample.MultiGroupComp.AdjVars.Scripts"
 RUN_FILESIR:
@@ -8,19 +7,19 @@ RUN_FILESIR:
 INTRONBED_FILE:
   "path/to/snakemake_folder/JunctionCalling.Pipeline.Scripts/annotation_reference/leafviz_all_introns_cleaned.bed"
 SAMPLES:
-  - "MDS02A-chr21"
+  - "SAMPLEID"
 NPERM:
   100000
 JOB_NAME:
   "snakemake_part3"
 COMP_GROUPS_COLUMN:
-  "Genotype_1UMI"
+  "GENOTYPECOLUMN" # Replace with the column name where the comparison groups are defined
 COMP1:
   "WT"
 COMP2:
   "MUT"
 CELL_GROUPS_COLUMN:
-  "ALL"
+  "CELLTYPE" # Replace with the column name that allows to filter the cells that will be used for the analysis
 GROUPLIST:
   "ALL"
 OUTPUTDIR:

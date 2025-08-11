@@ -1,4 +1,17 @@
 # Sicelore2.0
+<!-- TOC -->
+
+- [Sicelore2.0](#sicelore20)
+    - [Installation](#installation)
+    - [Getting started](#getting-started)
+            - [Defining a snakemake profile](#defining-a-snakemake-profile)
+            - [Launching the pipeline](#launching-the-pipeline)
+            - [Expected inputs](#expected-inputs)
+            - [Outputs](#outputs)
+- [Updated version: Sicelore 2.1](#updated-version-sicelore-21)
+
+<!-- /TOC -->
+
 
 ## Installation
 
@@ -78,3 +91,6 @@ Here's the structure of the output's directory, as long with the important outpu
         |-- isoform_outputs
             see sicelore pipeline
 ```
+# Updated version: Sicelore 2.1
+
+This part has been deprecated. It is suggested to use [SiCeLoRe 2.1](https://github.com/ucagenomix/sicelore-2.1). A basic explanation of how to run this pipeline can be found at [this link](https://docs.google.com/document/d/1ZsmeHldcEm1mKGE0sp1x5u7Knfx2FEXmzE69CB1iBpE/edit?usp=sharing)

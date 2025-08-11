@@ -61,7 +61,7 @@ cell.meta.list = list()
 cell.meta.files <- grep(paste0(sample.names, collapse = "|"), list.files(path.to.cell.meta, full.names = T), value = T)
 
 for (file in cell.meta.files){
-  id <- gsub("_metadata.txt", "", file)
+  id <- gsub("_metadata.txt", "", basename(file))
   cell.meta = as.data.frame(read.table(file, stringsAsFactors = F, sep = "\t"))
   cell.meta = cell.meta[!is.na(cell.meta[,cell.groups.column]),]
   cell.meta = cell.meta[,c(cell.groups.column, comp.groups.column)]
@@ -225,6 +225,7 @@ results_foreach <- pblapply(1:nperm, function(x){
 #stopCluster(cl)
 
 pvals.three = 1 - colSums(do.call(rbind, results_foreach)) /(nperm +1)
+#pvals.three = (colSums(do.call(rbind, results_foreach)) + 1) / (nperm + 1)
 
 message("Creating final data frames")
 final.three = data.frame(pvalue = pvals.three, three.obs.logOR.ratio = three.obs.ratio.num, exon_coordinates = names(three.obs.ratio.num))

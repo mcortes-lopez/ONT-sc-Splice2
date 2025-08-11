@@ -21,6 +21,8 @@ COMP1 = config["COMP1"]
 COMP2 = config["COMP2"]
 NCHUNK = config["N_CHUNK"]
 INTRONBED = config["INTRONBED_FILE"]
+FINAL_FOLDER_NAME = config["COMP1"] + "_vs_" + config["COMP2"] + config["CELL_GROUPS_COLUMN"] 
+
 rule all:
   input:
     expand("{workdir}/{outputdir}/combined_metadata/combined_metadata.csv", workdir = WORKDIR, outputdir = OUTPUTDIR),
@@ -33,6 +35,7 @@ rule all:
     expand("{workdir}/{outputdirIR}/{grouplist}/merge_final_output_IR/logOR_within_cell_type_ALT_3P_Junctions.txt", workdir = WORKDIR, outputdirIR = OUTPUTDIRIR, grouplist = GROUPLIST)
 
 """ Combine Metadata to make Common Cluster ID's """
+
 rule combine_meta:
   input:
     "{workdir}/{outputdir}/DT_input/3.Junction_metadata"
@@ -40,16 +43,15 @@ rule combine_meta:
     "{workdir}/{outputdir}/combined_metadata/combined_metadata.csv",
   params:
     job_name = "combine_meta",
-    memory = "select[mem>100] rusage[mem=100]",
     workdir = "{workdir}",
     outputdir = "{outputdir}",
     run_files = RUN_FILES,
     junc_metadata = "{workdir}/{outputdir}/DT_input/3.Junction_metadata",
-    samples = SAMPLES,
+    samples = SAMPLES
   log:
     "{workdir}/{outputdir}/logs/combine_meta.txt"
   threads:
-    10
+    5
   shell:
     """
     cd {params.workdir}
@@ -60,6 +62,7 @@ rule combine_meta:
     Rscript {params.run_files}/combine_metadata.R {params.junc_metadata} {params.workdir}/{params.outputdir}/combined_metadata {params.samples}
     """
 
+
 """ Split clusters for differential transcript usage """
 rule split_clusters:
   input:
@@ -68,10 +71,9 @@ rule split_clusters:
     "{workdir}/{outputdir}/{grouplist}/split_cluster_files/complete.txt"
   params:
     job_name = "split_clusters",
-    memory = "select[mem>100] rusage[mem=100]",
     workdir = "{workdir}",
     outputdir = "{outputdir}",
-    grouplist = GROUPLIST,
+    grouplist = "{grouplist}",
     run_files = RUN_FILES,
     counts = "{workdir}/{outputdir}/DT_input/1.JuncCounts_matrix",
     cell_metadata = "{workdir}/{outputdir}/DT_input/2.Cell_metadata",
@@ -95,21 +97,11 @@ rule split_clusters:
     cd {params.grouplist}
     mkdir -p split_cluster_files
     cd split_cluster_files
-
-    #for i in {{1..{params.nchunk}}};
-    #do
-    #  echo $i
-    #  touch test.txt
-    #  mkdir -p split_$i
-    #  mkdir -p split_"$i"/three_prime
-    #  mkdir -p split_"$i"/five_prime
-    #  mkdir -p split_"$i"/three_prime/counts_files
-    #  mkdir -p split_"$i"/three_prime/data_tables
-    #  mkdir -p split_"$i"/five_prime/counts_files
-    #  mkdir -p split_"$i"/five_prime/data_tables
-    #done
-    #module load R/4.1.2
-    Rscript {params.run_files}/split_ind_cell_type_combined_2WT.R {params.counts} {params.cell_metadata} {params.comp_groups_column} {params.cell_groups_column} {params.grouplist} {params.junc_metadata} {params.workdir}/{params.outputdir}/{params.grouplist}/split_cluster_files {params.samples} {params.junc_cov_thresh} {params.comp1} {params.comp2} {params.nchunk}
+    
+    Rscript {params.run_files}/split_ind_cell_type_combined_2WT.R {params.counts} {params.cell_metadata} \
+      {params.comp_groups_column} {params.cell_groups_column} {params.grouplist} {params.junc_metadata} \
+      {params.workdir}/{params.outputdir}/{params.grouplist}/split_cluster_files {params.samples} \
+      {params.junc_cov_thresh} {params.comp1} {params.comp2} {params.nchunk}
     touch complete.txt
     """
 
@@ -121,7 +113,7 @@ rule run_split:
     "{workdir}/{outputdir}/{grouplist}/split_cluster_output/complete.txt"
   params:
     job_name = "split_clusters",
-    memory = "select[mem>100] rusage[mem=100]",
+    mem_mb = 5000, # e.g., 5GB memory
     workdir = "{workdir}",
     outputdir = "{outputdir}",
     grouplist = "{grouplist}",
@@ -140,7 +132,7 @@ rule run_split:
   log:
     "{workdir}/{outputdir}/logs/{grouplist}_split_clusters.txt"
   threads:
-    10
+    1
   shell:
     """
     cd {params.workdir}
@@ -189,7 +181,7 @@ rule merge_annotate:
     "{workdir}/{outputdir}/{grouplist}/merge_final_output/logOR_within_cell_type_ALT_3P_Junctions_with_threshold_info.txt"
   params:
     job_name = "merge_annotate",
-    memory = "select[mem>100] rusage[mem=100]",
+    mem_mb = 50000, # e.g., 5GB memory
     workdir = "{workdir}",
     outputdir = "{outputdir}",
     grouplist = "{grouplist}",
@@ -200,30 +192,28 @@ rule merge_annotate:
     10
   shell:
     """
-    cd {params.workdir}
-    cd {params.outputdir}
-    cd {params.grouplist}
-    mkdir -p merge_final_output
+    mkdir -p {params.workdir}/{params.outputdir}/{params.grouplist}/merge_final_output
 
-    # Check if split_cluster_output_IR has any content
-    total_files=$(find {params.workdir}/{params.outputdir}/{params.grouplist}/split_cluster_output -type f -name output_*.csv | wc -l)
-    
+    total_files=$(find {params.workdir}/{params.outputdir}/{params.grouplist}/split_cluster_output -type f -name 'output_*.csv' | wc -l)
+
     if [ "$total_files" -eq 0 ]; then
-      echo "split_cluster_outputis empty. Skipping merge and annotation."
-      touch {output}
-      exit 0
+        echo "split_cluster_output is empty. Skipping merge and annotation."
+        touch {output}
+        exit 0
     else
-      sbatch -W --dependency=singleton --job-name={params.job_name} \
-        {params.run_files}/run_merge_combine_output.sh {params.run_files} \
-        {params.workdir}/{params.outputdir}/{params.grouplist}/split_cluster_output \
-        {params.workdir}/{params.outputdir}/combined_metadata/combined_metadata.csv \
-        {params.workdir}/{params.outputdir}/{params.grouplist}/merge_final_output & wait
+        jid1=$(sbatch --parsable --job-name={params.job_name}_merge \
+            {params.run_files}/run_merge_combine_output.sh \
+            {params.run_files} \
+            {params.workdir}/{params.outputdir}/{params.grouplist}/split_cluster_output \
+            {params.workdir}/{params.outputdir}/combined_metadata/combined_metadata.csv \
+            {params.workdir}/{params.outputdir}/{params.grouplist}/merge_final_output)
 
-      sbatch -W --dependency=singleton --job-name={params.job_name} \
-        {params.run_files}/run_DTU_annotation.new.sh \
-        {params.workdir}/{params.outputdir}/{params.grouplist}/merge_final_output \
-        {params.run_files} & wait
-    fi 
+        sbatch -W --dependency=afterok:$jid1 --job-name={params.job_name}_annotate \
+            {params.run_files}/run_DTU_annotation.new.sh \
+            {params.workdir}/{params.outputdir}/{params.grouplist}/merge_final_output \
+            {params.run_files}
+    fi
+
     echo "Done!"
     """
 
@@ -231,12 +221,12 @@ rule merge_annotate:
 """ IR: Combine Metadata to make Common Cluster ID's """
 rule combine_meta_IR:
   input:
-    config = "config.yaml"
+    "{workdir}/{outputdirIR}/DT_input/3.Junction_metadata_exon"
   output:
     "{workdir}/{outputdirIR}/combined_metadata_IR/combined_metadata_IR.csv",
   params:
-    job_name = "combine_meta",
-    memory = "select[mem>100] rusage[mem=100]",
+    job_name = "combine_meta_ir",
+    memory = "select[mem>50] rusage[mem=50]",
     workdir = "{workdir}",
     outputdir = "{outputdirIR}",
     run_files = RUN_FILESIR,
@@ -265,7 +255,8 @@ rule split_clusters_IR:
     "{workdir}/{outputdirIR}/{grouplist}/split_cluster_files_IR/complete_IR.txt"
   params:
     job_name = "split_clusters",
-    memory = "select[mem>100] rusage[mem=100]",
+    mem_mb = 50000, # e.g., 5GB memory
+    memory = "select[mem>50] rusage[mem=50]",
     workdir = "{workdir}",
     outputdir = "{outputdirIR}",
     grouplist = GROUPLIST,
@@ -283,7 +274,7 @@ rule split_clusters_IR:
   log:
     "{workdir}/{outputdirIR}/logs/{grouplist}_split_clusters_IR.txt"
   threads:
-    10
+    5
   shell:
     """
     cd {params.workdir}
@@ -292,17 +283,10 @@ rule split_clusters_IR:
     cd {params.grouplist}
     mkdir -p split_cluster_files_IR
     cd split_cluster_files_IR
-
-    #for i in {{1..{params.nchunk}}}
-    #do
-    #  echo $i
-    #  touch test.txt
-    #  mkdir -p split_$i
-    #  mkdir -p split_"$i"/counts_files
-    #  mkdir -p split_"$i"/data_tables
-    #done
-    #module load R/4.1.2
-    Rscript {params.run_files}/split_clusters_exon.R {params.counts} {params.cell_metadata} {params.comp_groups_column} {params.cell_groups_column} {params.grouplist} {params.junc_metadata} {params.workdir}/{params.outputdir}/{params.grouplist}/split_cluster_files_IR {params.samples} {params.junc_cov_thresh} {params.comp1} {params.comp2} {params.nchunk}
+    Rscript {params.run_files}/split_clusters_exon.R {params.counts} {params.cell_metadata} \
+      {params.comp_groups_column} {params.cell_groups_column} {params.grouplist} {params.junc_metadata} \
+      {params.workdir}/{params.outputdir}/{params.grouplist}/split_cluster_files_IR {params.samples} \
+      {params.junc_cov_thresh} {params.comp1} {params.comp2} {params.nchunk}
     touch complete_IR.txt
     """
 
@@ -313,11 +297,12 @@ rule run_split_IR:
   output:
     "{workdir}/{outputdirIR}/{grouplist}/split_cluster_output_IR/complete_IR.txt"
   params:
+    mem_mb = 5000, # e.g., 5GB memory
     job_name = "split_clusters",
-    memory = "select[mem>100] rusage[mem=100]",
+    memory = "select[mem>50] rusage[mem=50]",
     workdir = "{workdir}",
     outputdir = "{outputdirIR}",
-    grouplist = "{grouplist}",
+    grouplist = GROUPLIST,
     run_files = RUN_FILESIR,
     counts = "{workdir}/{outputdirIR}/DT_input/1.JuncCounts_matrix_exon",
     cell_metadata = "{workdir}/{outputdirIR}/DT_input/2.Cell_metadata",
@@ -332,7 +317,7 @@ rule run_split_IR:
   log:
     "{workdir}/{outputdirIR}/logs/{grouplist}_split_clusters_IR.txt"
   threads:
-    10
+    1
   shell:
     """
     cd {params.workdir}
@@ -383,8 +368,8 @@ rule merge_annotate_IR:
   output:
     "{workdir}/{outputdirIR}/{grouplist}/merge_final_output_IR/logOR_within_cell_type_ALT_3P_Junctions.txt"
   params:
-    job_name = "merge_annotate",
-    memory = "select[mem>100] rusage[mem=100]",
+    job_name = "merge_annotate_IR",
+    mem_mb = 50000, # e.g., 5GB memory
     workdir = "{workdir}",
     outputdir = "{outputdirIR}",
     grouplist = "{grouplist}",
@@ -423,3 +408,4 @@ rule merge_annotate_IR:
     fi
     echo "Done!"
     """
+

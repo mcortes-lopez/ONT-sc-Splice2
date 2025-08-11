@@ -1,7 +1,8 @@
 __default__:
-    partition: pe2
+    partition: cpu
     mem: 20G
     cpus-per-task: 5
+    time: "2-00:00:00"
     job-name: "{rule}"
     output: "logs/{rule}/{rule}.{wildcards}.out"
     error: "logs/{rule}/{rule}.{wildcards}.err"

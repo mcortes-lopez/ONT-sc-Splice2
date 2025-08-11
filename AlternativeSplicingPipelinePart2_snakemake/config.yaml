@@ -1,14 +1,16 @@
 WORKDIR:
-  "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/"
+  "/path/to/your/workdir"
 RUN_FILES:
-  "/gpfs/commons/groups/compbio/projects/rf_projects/rf_LandauONT/012324/pipeline/AlternativeSplicingPipelinePart2_snakemake/JunctionCalling.Pipeline.Scripts"
+  "path/to/snakemake/pipeline/JunctionCalling.Pipeline.Scripts"
 SICERLORE_VERSION:
   "2.1"
 SAMPLES:
-  - "MPN01"
+  - "SAMPLENAME"
 JOB_NAME:
   "snakemake_part2"
 OUTPUTDIR:
-  "output_files"
+  "splicing_runs_folder"
 METADATADIR:
-  "/input_files/4.Cell_metadata"
+  "/sample_metadata_ont/"
+LIBRARY_TYPE:
+  "ONT"
