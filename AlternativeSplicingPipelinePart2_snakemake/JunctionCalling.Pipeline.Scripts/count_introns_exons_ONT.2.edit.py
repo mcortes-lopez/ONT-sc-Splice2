@@ -15,19 +15,9 @@ def robust_get_tag(read, tag="ts"):
 
 BAM_CREF_SKIP = 3
 match_or_deletion = {0, 2, 7, 8} # only M/=/X (0/7/8) and D (2) are related to genome position
-# Parse library_type argument and set tags accordingly
-if len(sys.argv) > 3:
-    library_type = sys.argv[3]
-else:
-    library_type = ""
 
-if library_type == "ONT":
-    cell_barcode_tag = "BC"
-    umi_tag = "U8"
-else:
-    cell_barcode_tag = "CB"
-    umi_tag = "XM"
-def find_introns_single_cell(read_iterator, strandtag = "GS", cell_barcode_tag = cell_barcode_tag):
+def find_introns_single_cell(read_iterator, strandtag = "GS", cell_barcode_tag = "BC"):
+
     intron_counts = {}
     exon_counts = {}
     cell_barcodes = set()
@@ -38,7 +28,7 @@ def find_introns_single_cell(read_iterator, strandtag = "GS", cell_barcode_tag =
 	#chrom_strand = robust_get_tag(r, strandtag)
         chrom_strand = (r.reference_name, "-" if r.is_reverse else "+")
         cell_barcode = robust_get_tag(r, cell_barcode_tag)
-        umi = robust_get_tag(r, umi_tag)
+        umi = robust_get_tag(r, "U8")
         umis[umi] += 1 # keep track of reads per umi
         if cell_barcode == ".": continue # unassigned read
         cell_barcodes.add(cell_barcode) # useful for outputting data later
@@ -79,12 +69,15 @@ for chrom_strand,r in intron_counts.items():
     print(chrom_strand,len(r))
 
 import gzip
-from Bio.Seq import Seq
+
+# for viewing in IGV
+#with gzip.open("counts_pysam.bed.gz","w") as f: 
+#    for chrom_strand,r in res.items(): 
+#        for j,c in r.items():
+#            if c >= 10: 
+#                f.write( ("%s\t%i\t%i\t.\t%i\n" % (chrom_strand[0], j[0], j[1], c)).encode() )
                 
-if library_type != "ONT":
-    cell_barcodes = [str(Seq(cb).reverse_complement()) for cb in cell_barcodes]
-else:
-    cell_barcodes = list(cell_barcodes)
+cell_barcodes = list(cell_barcodes)
 
 def write_output(res_sc, output_file_path): 
     with gzip.open(output_file_path, "wt", encoding='utf-8') as f: 
@@ -102,7 +95,8 @@ def write_output(res_sc, output_file_path):
 write_output(exon_counts, sys.argv[2] + "_exons.tsv.gz") 
 write_output(intron_counts, sys.argv[2] + "_introns.tsv.gz") 
 
-import numpy as npumi_counts = list(umis.values())
+import numpy as np
+umi_counts = list(umis.values())
 print("Average value for the number of reads per umi:")
 print(np.mean(umi_counts)) # knowles: 1.21 , Paulina: 1.611843008688349 					## Average value for the number of reads per umi's 
 print("Median value for the number of reads per umi:")
