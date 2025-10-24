@@ -94,25 +94,32 @@ import gzip
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from Bio.Seq import Seq  # assuming you're using Biopython for reverse_complement
 
-# Reverse complement cell barcodes if not ONT
+from Bio.Seq import Seq
+
 if library_type != "ONT":
-    cell_barcodes = [str(Seq(cb).reverse_complement()) for cb in cell_barcodes]
+    cb_map = {str(Seq(cb).reverse_complement()): cb for cb in cell_barcodes}
 else:
-    cell_barcodes = list(cell_barcodes)
+    cb_map = {cb: cb for cb in cell_barcodes}
+
+cell_barcodes_rc = list(cb_map.keys())
+
 
 def write_output(res_sc, output_file_path): 
     with gzip.open(output_file_path, "wt", encoding='utf-8') as f: 
-        f.write( "chrom\tstart\tend\tstrand" )
-        for cb in cell_barcodes: 
-            f.write( "\t%s" % cb )
+        # Write header
+        f.write("chrom\tstart\tend\tstrand")
+        for cb_rc in cell_barcodes_rc: 
+            f.write("\t%s" % cb_rc)   # print reverse complement
         f.write("\n")
-        for chrom_strand,r in res_sc.items(): 
-            for junc,counts in r.items():
-                f.write( "%s\t%i\t%i\t%s" % (chrom_strand[0], junc[0], junc[1], chrom_strand[1]) )
-                for cb in cell_barcodes: 
-                    f.write( "\t%i" % counts[cb] )
+
+        # Write counts
+        for chrom_strand, r in res_sc.items(): 
+            for junc, counts in r.items():
+                f.write("%s\t%i\t%i\t%s" % (chrom_strand[0], junc[0], junc[1], chrom_strand[1]))
+                for cb_rc in cell_barcodes_rc: 
+                    cb_orig = cb_map[cb_rc]        # original barcode used as key
+                    f.write("\t%i" % counts[cb_orig])
                 f.write("\n")
 
 write_output(exon_counts, sys.argv[2] + "_exons.tsv.gz") 

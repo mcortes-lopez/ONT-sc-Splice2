@@ -10,6 +10,7 @@ SAMPLES = config["SAMPLES"]
 JOB_NAME = config["JOB_NAME"]
 OUTPUTDIR = config["OUTPUTDIR"]
 METADATADIR = config["METADATADIR"]
+LIBRARY_TYPE = config["LIBRARY_TYPE"]
 
 rule all:
   input:
@@ -71,7 +72,8 @@ rule junc_call:
     workdir = "{workdir}",
     outputdir = "{outputdir}",
     run_files = RUN_FILES,
-    samples = "{samples}"
+    samples = "{samples}",
+    library_type = LIBRARY_TYPE
   log:
     "{workdir}/{outputdir}/logs/{samples}_junc_call.txt"
   threads:
@@ -85,7 +87,7 @@ rule junc_call:
     cd {params.samples}/leafcutter_outputs_{params.samples}
 
     # Run the python junction calling script
-    python {params.run_files}/count_introns_exons_ONT.2.edit.py {input} {params.samples}
+    python {params.run_files}/count_introns_exons_ONT_and_PB.py {input} {params.samples} {params.library_type}
     echo "junction calling done"
     """
 
@@ -160,7 +162,7 @@ rule intron_anno:
     workdir = "{workdir}",
     outputdir = "{outputdir}",
     run_files = RUN_FILES,
-    samples = "{samples}",
+    samples = "{samples}"
   log:
     "{workdir}/{outputdir}/logs/{samples}_intron_anno.txt"
   threads:
@@ -223,8 +225,8 @@ rule strand_adjust:
     samples = "{samples}"
   log:
     "{workdir}/{outputdir}/logs/{samples}_strand_adjust.txt"
-  threads:
-    10
+  #threads:
+  #  10
   shell:
     """
     cd {params.workdir}
